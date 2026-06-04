@@ -37,6 +37,18 @@
     <!-- Render mount point -->
     <div id="app"></div>
 
+    <!-- Custom Modal Dialog (Notion-style) -->
+    <div id="delete-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-title">Remove row?</div>
+        <div class="modal-desc">Are you sure you want to delete this item? This action cannot be undone.</div>
+        <div class="modal-buttons">
+          <button id="modal-cancel-btn" class="modal-btn modal-btn-cancel">Cancel</button>
+          <button id="modal-confirm-btn" class="modal-btn modal-btn-delete">Yes, Remove</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- App logic -->

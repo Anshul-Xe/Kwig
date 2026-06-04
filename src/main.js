@@ -1,4 +1,5 @@
 /* Core Application Logic for Daily Tracker Mobile App */
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 // 1. Storage Bridge (Fallback to localStorage when window.storage is not provided)
 if (!window.storage) {
@@ -102,10 +103,15 @@ let S = {
   cs: [],
   cf: [],
   ch: [],
+  deleted_defaults: [], // Track deleted default habits
   tasks: [],
   as: null,
   wd: null,
-  db: null
+  db: null,
+  notifiers: {
+    water: { enabled: false, interval: 1 },
+    walk: { enabled: false, interval: 1 }
+  }
 };
 
 // Calculate thought of the day index based on year progress
@@ -131,6 +137,75 @@ const sv = async (k, v) => {
   }
 };
 
+// 4. Notification Scheduler Logic
+async function updateNotificationScheduling() {
+  try {
+    const perm = await LocalNotifications.checkPermissions();
+    if (perm.display !== 'granted') {
+      await LocalNotifications.requestPermissions();
+    }
+    
+    // Clear existing reminders
+    await LocalNotifications.cancel({ notifications: [{ id: 101 }, { id: 102 }] });
+    
+    const pending = [];
+    
+    // Water
+    if (S.notifiers.water.enabled) {
+      pending.push({
+        id: 101,
+        title: "Stay Hydrated 💧",
+        body: "Time to drink some water and stay healthy!",
+        schedule: {
+          every: S.notifiers.water.interval === 1 ? 'hour' : undefined,
+          on: S.notifiers.water.interval > 1 ? { hour: new Date().getHours() + S.notifiers.water.interval } : undefined,
+          repeats: true
+        }
+      });
+    }
+    
+    // Walk
+    if (S.notifiers.walk.enabled) {
+      pending.push({
+        id: 102,
+        title: "Time for a Walk 🚶‍♂️",
+        body: "Take a break, stretch your legs, and get some fresh air!",
+        schedule: {
+          every: S.notifiers.walk.interval === 1 ? 'hour' : undefined,
+          on: S.notifiers.walk.interval > 1 ? { hour: new Date().getHours() + S.notifiers.walk.interval } : undefined,
+          repeats: true
+        }
+      });
+    }
+    
+    if (pending.length > 0) {
+      await LocalNotifications.schedule({ notifications: pending });
+    }
+  } catch (e) {
+    console.warn("Native local notifications unavailable, using web fallbacks:", e);
+    setupWebTimers();
+  }
+}
+
+let webIntervals = { water: null, walk: null };
+function setupWebTimers() {
+  clearInterval(webIntervals.water);
+  clearInterval(webIntervals.walk);
+  
+  if (S.notifiers.water.enabled && 'Notification' in window && Notification.permission === 'granted') {
+    webIntervals.water = setInterval(() => {
+      new Notification("Stay Hydrated 💧", { body: "It's time to drink some water!" });
+    }, S.notifiers.water.interval * 3600 * 1000);
+  }
+  
+  if (S.notifiers.walk.enabled && 'Notification' in window && Notification.permission === 'granted') {
+    webIntervals.walk = setInterval(() => {
+      new Notification("Time for a Walk 🚶‍♂️", { body: "Take a break and stretch your legs!" });
+    }, S.notifiers.walk.interval * 3600 * 1000);
+  }
+}
+
+// 5. State Loading
 async function loadAll() {
   S.pc = await ld(`prod-${TK}`, {});
   S.hc = await ld(`health-${TK}`, {});
@@ -138,16 +213,38 @@ async function loadAll() {
   S.cs = await ld('cs', []);
   S.cf = await ld('cf', []);
   S.ch = await ld('ch', []);
+  S.deleted_defaults = await ld('deleted_defaults', []);
+  S.notifiers = await ld('notifiers', {
+    water: { enabled: false, interval: 1 },
+    walk: { enabled: false, interval: 1 }
+  });
+  
+  // Apply web timers fallback if permitted
+  if ('Notification' in window && Notification.permission === 'granted') {
+    setupWebTimers();
+  }
 }
 
-const si = () => [...SB, ...S.cs];
-const fi = () => [...FB, ...S.cf];
-const hi = () => [...HB, ...S.ch];
+const si = () => [...SB, ...S.cs].filter(i => !S.deleted_defaults.includes(i.id));
+const fi = () => [...FB, ...S.cf].filter(i => !S.deleted_defaults.includes(i.id));
+const hi = () => [...HB, ...S.ch].filter(i => !S.deleted_defaults.includes(i.id));
 const ai = () => [...si(), ...fi()];
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const gdk = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 const sd = d => `${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
+
+const getHabitTotals = (pcState, hcState) => {
+  const activeS = SB.filter(x => !S.deleted_defaults.includes(x.id));
+  const activeF = FB.filter(x => !S.deleted_defaults.includes(x.id));
+  const activeH = HB.filter(x => !S.deleted_defaults.includes(x.id));
+  return {
+    study: activeS.length ? Math.round(activeS.filter(x => pcState[x.id]).length / activeS.length * 100) : 0,
+    fun: activeF.length ? Math.round(activeF.filter(x => pcState[x.id]).length / activeF.length * 100) : 0,
+    health: activeH.length ? Math.round(activeH.filter(x => hcState[x.id]).length / activeH.length * 100) : 0
+  };
+};
+
 const pc = p => p >= 75 ? 'var(--color-accent-green)' : p >= 40 ? 'var(--color-accent-orange)' : p > 0 ? 'var(--color-accent-red)' : 'var(--color-text-tertiary)';
 const fmtDl = iso => {
   if (!iso) return '';
@@ -163,9 +260,10 @@ function updWd() {
   if (!S.wd) return;
   const t = S.wd.find(x => x.isToday);
   if (!t) return;
-  t.study = Math.round(SB.filter(x => S.pc[x.id]).length / SB.length * 100);
-  t.fun = Math.round(FB.filter(x => S.pc[x.id]).length / FB.length * 100);
-  t.health = Math.round(HB.filter(x => S.hc[x.id]).length / HB.length * 100);
+  const totals = getHabitTotals(S.pc, S.hc);
+  t.study = totals.study;
+  t.fun = totals.fun;
+  t.health = totals.health;
 }
 
 async function loadWd() {
@@ -175,12 +273,13 @@ async function loadWd() {
     d.setDate(d.getDate() - i);
     const dk = gdk(d);
     const p = await ld(`prod-${dk}`, {}), h = await ld(`health-${dk}`, {});
+    const totals = getHabitTotals(p, h);
     rows.push({
       label: i === 0 ? 'Today' : sd(d),
       isToday: i === 0,
-      study: Math.round(SB.filter(x => p[x.id]).length / SB.length * 100),
-      fun: Math.round(FB.filter(x => p[x.id]).length / FB.length * 100),
-      health: Math.round(HB.filter(x => h[x.id]).length / HB.length * 100)
+      study: totals.study,
+      fun: totals.fun,
+      health: totals.health
     });
   }
   S.wd = rows;
@@ -193,14 +292,20 @@ async function loadDb() {
     d.setDate(d.getDate() - i);
     const dk = gdk(d);
     const p = await ld(`prod-${dk}`, {}), h = await ld(`health-${dk}`, {}), ta = await ld(`tasks-${dk}`, []);
-    const sD = SB.filter(x => p[x.id]).length, fD = FB.filter(x => p[x.id]).length, hD = HB.filter(x => h[x.id]).length, tDn = ta.filter(t => t.done).length;
-    if (sD + fD + hD + ta.length > 0 || i === 0) {
+    const totals = getHabitTotals(p, h);
+    const tDn = ta.filter(t => t.done).length;
+    
+    // Check custom habits loaded for that specific day
+    const customS = await ld('cs', []), customF = await ld('cf', []), customH = await ld('ch', []);
+    const totalCount = SB.length + customS.length + FB.length + customF.length + HB.length + customH.length + ta.length;
+    
+    if (totalCount > 0 || i === 0) {
       rows.push({
         fd: `${DAYS[d.getDay()].slice(0, 3)}, ${sd(d)}`,
         isToday: i === 0,
-        study: Math.round(sD / SB.length * 100),
-        fun: Math.round(fD / FB.length * 100),
-        health: Math.round(hD / HB.length * 100),
+        study: totals.study,
+        fun: totals.fun,
+        health: totals.health,
         tDone: tDn,
         tTotal: ta.length
       });
@@ -249,10 +354,13 @@ function shdr(title, fn, mt) {
 
 function irow(item, chk, type, isCus, sec) {
   const col = chk ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)', dec = chk ? 'line-through' : 'none';
-  const del = isCus ? `<button onclick="event.stopPropagation();delC('${sec}','${item.id}')" style="background:none;border:none;cursor:pointer;padding:0 4px;color:var(--color-text-tertiary);flex-shrink:0" aria-label="Delete habit"><i class="ti ti-x" style="font-size:12px" aria-hidden="true"></i></button>` : '';
-  return `<div class="cr" onclick="togI('${item.id}','${type}')" style="display:flex;align-items:center;gap:8px;padding:12px 0;border-bottom:0.5px solid var(--color-border-tertiary)">
+  return `<div class="cr" onclick="togI('${item.id}','${type}')" 
+    data-del-type="habit" 
+    data-del-id="${item.id}" 
+    data-del-sec="${sec}" 
+    data-del-name="${item.label}"
+    style="display:flex;align-items:center;gap:8px;padding:12px 0;border-bottom:0.5px solid var(--color-border-tertiary)">
     <span style="flex:1;font-size:15px;color:${col};text-decoration:${dec};transition:all 0.2s">${item.label}</span>
-    ${del}
     ${cbx(chk)}
   </div>`;
 }
@@ -272,7 +380,11 @@ function renderHome() {
   const tRows = S.tasks.map(t => {
     const od = t.deadline && t.deadline < tiso() && !t.done;
     const dlColor = od ? 'var(--color-accent-red)' : 'var(--color-text-secondary)';
-    return `<div class="cr" style="display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:0.5px solid var(--color-border-tertiary)">
+    return `<div class="cr" 
+      data-del-type="task" 
+      data-del-id="${t.id}" 
+      data-del-name="${t.text || 'Untitled'}"
+      style="display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:0.5px solid var(--color-border-tertiary)">
       <span onclick="togT('${t.id}')" style="flex:1;min-width:0;font-size:13px;color:${t.done ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)'};text-decoration:${t.done ? 'line-through' : 'none'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:all 0.2s">${t.text || 'Untitled'}</span>
       <span onclick="cycP('${t.id}')" style="width:54px;flex-shrink:0;cursor:pointer">${pri(t.priority || 'Medium')}</span>
       <span style="width:52px;flex-shrink:0;font-size:11px;text-align:center;color:${dlColor}">${t.deadline ? fmtDl(t.deadline) : '—'}</span>
@@ -324,6 +436,62 @@ function renderHome() {
     </div>`;
   }
 
+  // Notifiers UI Component
+  const wEn = S.notifiers.water.enabled, wInt = S.notifiers.water.interval;
+  const lEn = S.notifiers.walk.enabled, lInt = S.notifiers.walk.interval;
+  const notifierHtml = `<div class="f4" style="margin-bottom:24px">
+    <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px">Reminders</div>
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px 16px;display:flex;flex-direction:column;gap:14px;box-shadow: 0 2px 8px var(--color-shadow)">
+      
+      <!-- Water reminder -->
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:10px">
+          <i class="ti ti-droplet" style="font-size:18px;color:var(--color-accent-blue)" aria-hidden="true"></i>
+          <div style="display:flex;flex-direction:column">
+            <span style="font-size:13px;font-weight:500;color:var(--color-text-primary)">Drink Water</span>
+            <span style="font-size:11px;color:var(--color-text-tertiary)">Stay hydrated during the day</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <select class="dropdown-select" onchange="window.changeNotifierInterval('water', this.value)">
+            <option value="1" ${wInt === 1 ? 'selected' : ''}>Every 1 hr</option>
+            <option value="2" ${wInt === 2 ? 'selected' : ''}>Every 2 hr</option>
+            <option value="3" ${wInt === 3 ? 'selected' : ''}>Every 3 hr</option>
+          </select>
+          <label class="switch">
+            <input type="checkbox" ${wEn ? 'checked' : ''} onchange="window.toggleNotifier('water', this.checked)">
+            <span class="slider-toggle"></span>
+          </label>
+        </div>
+      </div>
+      
+      <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
+      
+      <!-- Walk reminder -->
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:10px">
+          <i class="ti ti-walk" style="font-size:18px;color:var(--color-accent-green)" aria-hidden="true"></i>
+          <div style="display:flex;flex-direction:column">
+            <span style="font-size:13px;font-weight:500;color:var(--color-text-primary)">Go for a Walk</span>
+            <span style="font-size:11px;color:var(--color-text-tertiary)">Take breaks and stretch</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <select class="dropdown-select" onchange="window.changeNotifierInterval('walk', this.value)">
+            <option value="1" ${lInt === 1 ? 'selected' : ''}>Every 1 hr</option>
+            <option value="2" ${lInt === 2 ? 'selected' : ''}>Every 2 hr</option>
+            <option value="3" ${lInt === 3 ? 'selected' : ''}>Every 3 hr</option>
+          </select>
+          <label class="switch">
+            <input type="checkbox" ${lEn ? 'checked' : ''} onchange="window.toggleNotifier('walk', this.checked)">
+            <span class="slider-toggle"></span>
+          </label>
+        </div>
+      </div>
+      
+    </div>
+  </div>`;
+
   return `<div style="padding:20px 0 20px">
     <div class="f1">
       <div style="font-size:11px;color:var(--color-text-tertiary);font-weight:600;letter-spacing:0.09em;text-transform:uppercase;margin-bottom:4px">${DN}</div>
@@ -366,6 +534,9 @@ function renderHome() {
       </div>
     </div>
     
+    <!-- Reminders / Notifiers -->
+    ${notifierHtml}
+    
     <div class="f5">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <span style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase">Weekly progress</span>
@@ -406,6 +577,45 @@ function renderProd() {
 function renderHealth() {
   const hIds = new Set(HB.map(x => x.id));
   const hR = hi().map(i => irow(i, !!S.hc[i.id], 'health', !hIds.has(i.id), 'health')).join('');
+  
+  // Water Level Slider UI
+  const wLvl = S.hc.water_level !== undefined ? S.hc.water_level : 1.0;
+  const waterSliderHtml = `<div class="range-container" style="margin-top: 24px">
+    <div class="range-label-container">
+      <span class="range-title"><i class="ti ti-drop-circle" style="color:var(--color-accent-blue)"></i> Water Intake Scale</span>
+      <span class="range-value" id="water-slider-value">${wLvl.toFixed(1)} L</span>
+    </div>
+    <input type="range" class="range-slider" min="1" max="4" step="0.5" value="${wLvl}" oninput="window.updateWaterSlider(this.value)">
+    <div class="scale-ticks">
+      <span class="scale-tick">1L</span>
+      <span class="scale-tick">1.5</span>
+      <span class="scale-tick">2L</span>
+      <span class="scale-tick">2.5</span>
+      <span class="scale-tick">3L</span>
+      <span class="scale-tick">3.5</span>
+      <span class="scale-tick">4L</span>
+    </div>
+  </div>`;
+  
+  // Consciousness Meter Slider UI
+  const cLvl = S.hc.conscious_level !== undefined ? S.hc.conscious_level : 4;
+  const cText = cLvl <= 2 ? "Low 😴" : cLvl <= 4 ? "Decent 🙂" : "High 🧠";
+  const consciousSliderHtml = `<div class="range-container" style="margin-top: 32px; border-top: 0.5px solid var(--color-border-tertiary); padding-top: 20px">
+    <div class="range-label-container">
+      <span class="range-title"><i class="ti ti-brain" style="color:var(--color-accent-orange)"></i> Conscious Meter</span>
+      <span class="range-value" id="conscious-slider-value" style="color:${cLvl <= 2 ? 'var(--color-accent-red)' : cLvl <= 4 ? 'var(--color-accent-orange)' : 'var(--color-accent-green)'}">${cLvl} - ${cText}</span>
+    </div>
+    <input type="range" class="range-slider" min="1" max="6" step="1" value="${cLvl}" oninput="window.updateConsciousSlider(this.value)">
+    <div class="scale-ticks">
+      <span class="scale-tick">1 (Low)</span>
+      <span class="scale-tick">2</span>
+      <span class="scale-tick">3</span>
+      <span class="scale-tick">4 (Decent)</span>
+      <span class="scale-tick">5</span>
+      <span class="scale-tick">6 (High)</span>
+    </div>
+  </div>`;
+
   return `<div class="pg" style="padding:20px 0 20px">
     <button class="back-btn" onclick="goTo('home')">
       <i class="ti ti-arrow-left" style="font-size:15px" aria-hidden="true"></i>Back
@@ -417,6 +627,12 @@ function renderHealth() {
     <div style="border-top:0.5px solid var(--color-border-tertiary)">
       ${hR}${S.as === 'health' ? aiform('health') : ''}
     </div>
+    
+    <!-- Water Intake Scale -->
+    ${waterSliderHtml}
+    
+    <!-- Consciousness Scale -->
+    ${consciousSliderHtml}
   </div>`;
 }
 
@@ -601,6 +817,193 @@ window.delC = (sec, id) => {
   sv(key, arr);
   render();
 };
+
+// 6. Sliders Handler functions
+window.updateWaterSlider = val => {
+  const floatVal = parseFloat(val);
+  S.hc.water_level = floatVal;
+  sv(`health-${TK}`, S.hc);
+  const el = document.getElementById('water-slider-value');
+  if (el) el.textContent = `${floatVal.toFixed(1)} L`;
+};
+
+window.updateConsciousSlider = val => {
+  const intVal = parseInt(val);
+  S.hc.conscious_level = intVal;
+  sv(`health-${TK}`, S.hc);
+  
+  const el = document.getElementById('conscious-slider-value');
+  if (el) {
+    const text = intVal <= 2 ? "Low 😴" : intVal <= 4 ? "Decent 🙂" : "High 🧠";
+    el.textContent = `${intVal} - ${text}`;
+    el.style.color = intVal <= 2 ? 'var(--color-accent-red)' : intVal <= 4 ? 'var(--color-accent-orange)' : 'var(--color-accent-green)';
+  }
+};
+
+// 7. Notifier Toggle / Value update functions
+window.toggleNotifier = async (type, checked) => {
+  S.notifiers[type].enabled = checked;
+  sv('notifiers', S.notifiers);
+  
+  if (checked) {
+    if ('Notification' in window && Notification.permission === 'default') {
+      await Notification.requestPermission();
+    }
+  }
+  
+  updateNotificationScheduling();
+};
+
+window.changeNotifierInterval = (type, val) => {
+  S.notifiers[type].interval = parseInt(val);
+  sv('notifiers', S.notifiers);
+  updateNotificationScheduling();
+};
+
+// 8. Long Press (Hold-to-Delete) Gesture Logic
+let holdTimer = null;
+let holdTarget = null;
+let holdTriggered = false;
+let pendingDelete = null;
+let startX = 0, startY = 0;
+
+function handleStart(e, targetRow) {
+  holdTarget = targetRow;
+  holdTriggered = false;
+  
+  targetRow.classList.add('held-highlight');
+  
+  holdTimer = setTimeout(() => {
+    holdTriggered = true;
+    targetRow.classList.remove('held-highlight');
+    
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+    
+    const type = targetRow.getAttribute('data-del-type');
+    const id = targetRow.getAttribute('data-del-id');
+    const sec = targetRow.getAttribute('data-del-sec');
+    const name = targetRow.getAttribute('data-del-name') || 'this item';
+    
+    showDeleteModal(type, id, sec, name);
+  }, 600);
+}
+
+function handleEnd() {
+  if (holdTimer) {
+    clearTimeout(holdTimer);
+    holdTimer = null;
+  }
+  if (holdTarget) {
+    holdTarget.classList.remove('held-highlight');
+  }
+}
+
+function showDeleteModal(type, id, sec, name) {
+  pendingDelete = { type, id, sec };
+  const modal = document.getElementById('delete-modal');
+  if (modal) {
+    const descEl = modal.querySelector('.modal-desc');
+    if (descEl) {
+      descEl.textContent = `Are you sure you want to delete "${name}"? This action cannot be undone.`;
+    }
+    modal.classList.add('active');
+  }
+}
+
+function closeDeleteModal() {
+  const modal = document.getElementById('delete-modal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+  pendingDelete = null;
+}
+
+// Attach global event listeners to block short clicks when long-press was triggered
+document.addEventListener('click', e => {
+  if (holdTriggered) {
+    e.preventDefault();
+    e.stopPropagation();
+    holdTriggered = false;
+  }
+}, true); // Capture phase!
+
+document.addEventListener('touchstart', e => {
+  const row = e.target.closest('.cr');
+  if (!row) return;
+  const touch = e.touches[0];
+  startX = touch.clientX;
+  startY = touch.clientY;
+  handleStart(e, row);
+}, { passive: true });
+
+document.addEventListener('touchmove', e => {
+  if (!holdTarget) return;
+  const touch = e.touches[0];
+  const diffX = Math.abs(touch.clientX - startX);
+  const diffY = Math.abs(touch.clientY - startY);
+  if (diffX > 10 || diffY > 10) {
+    handleEnd();
+  }
+}, { passive: true });
+
+document.addEventListener('touchend', handleEnd, { passive: true });
+
+document.addEventListener('mousedown', e => {
+  const row = e.target.closest('.cr');
+  if (!row || e.button !== 0) return;
+  startX = e.clientX;
+  startY = e.clientY;
+  handleStart(e, row);
+});
+
+document.addEventListener('mousemove', e => {
+  if (!holdTarget) return;
+  const diffX = Math.abs(e.clientX - startX);
+  const diffY = Math.abs(e.clientY - startY);
+  if (diffX > 10 || diffY > 10) {
+    handleEnd();
+  }
+});
+
+document.addEventListener('mouseup', handleEnd);
+
+// Setup Modal Cancel/Confirm buttons
+document.getElementById('modal-cancel-btn').addEventListener('click', () => {
+  closeDeleteModal();
+});
+
+document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+  if (pendingDelete) {
+    const { type, id, sec } = pendingDelete;
+    
+    if (type === 'task') {
+      S.tasks = S.tasks.filter(t => t.id !== id);
+      sv(`tasks-${TK}`, S.tasks);
+    } else if (type === 'habit') {
+      // Check if it's default habit
+      const isDefault = SB.some(x => x.id === id) || FB.some(x => x.id === id) || HB.some(x => x.id === id);
+      if (isDefault) {
+        S.deleted_defaults.push(id);
+        sv('deleted_defaults', S.deleted_defaults);
+      } else {
+        // Custom habit
+        if (sec === 'study') S.cs = S.cs.filter(i => i.id !== id);
+        else if (sec === 'fun') S.cf = S.cf.filter(i => i.id !== id);
+        else S.ch = S.ch.filter(i => i.id !== id);
+        
+        const arr = sec === 'study' ? S.cs : sec === 'fun' ? S.cf : S.ch;
+        const key = sec === 'study' ? 'cs' : sec === 'fun' ? 'cf' : 'ch';
+        sv(key, arr);
+      }
+    }
+    
+    updWd();
+    render();
+  }
+  closeDeleteModal();
+});
 
 // Initial run
 render();
