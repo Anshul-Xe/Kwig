@@ -1,7 +1,7 @@
 {
-  "name": "daily-tracker-mobile",
+  "name": "kwig-mobile",
   "version": "1.0.0",
-  "description": "Notion-inspired mobile productivity tracker",
+  "description": "Kwig - Minimalist productivity, health, and task tracker mobile app",
   "main": "index.html",
   "scripts": {
     "dev": "vite",

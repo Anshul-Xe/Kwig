@@ -1,6 +1,6 @@
 {
-  "appId": "com.dailytracker.app",
-  "appName": "Daily Tracker",
+  "appId": "com.kwig.app",
+  "appName": "Kwig",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

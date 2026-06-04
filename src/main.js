@@ -1,4 +1,4 @@
-/* Core Application Logic for Daily Tracker Mobile App */
+/* Core Application Logic for Kwig Mobile App */
 import { LocalNotifications } from '@capacitor/local-notifications';
 
 // 1. Storage Bridge (Fallback to localStorage when window.storage is not provided)

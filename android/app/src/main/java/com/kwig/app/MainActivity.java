@@ -1,4 +1,4 @@
-package com.dailytracker.app;
+package com.kwig.app;
 
 import com.getcapacitor.BridgeActivity;
 
