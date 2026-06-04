@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Daily productivity, health and task tracker</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  
+  <!-- Tabler Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+  
+  <!-- Local Styles -->
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  
+  <!-- Mockup frame container for premium display (goes full screen on mobile screens) -->
+  <div id="app-container">
+    
+    <!-- Permanent Mobile Native Header with Theme Toggle -->
+    <header class="app-header">
+      <div class="logo-text">
+        <i class="ti ti-notebook" aria-hidden="true"></i>
+        <span>Daily Tracker</span>
+      </div>
+      <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
+        <i class="ti ti-moon" id="theme-icon" aria-hidden="true"></i>
+      </button>
+    </header>
+
+    <h2 class="sr-only">Daily productivity, health and task tracker with weekly database</h2>
+    
+    <!-- Render mount point -->
+    <div id="app"></div>
+
+  </div>
+
+  <!-- App logic -->
+  <script type="module" src="/src/main.js"></script>
+
+</body>
+</html>
