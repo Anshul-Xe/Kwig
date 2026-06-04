@@ -10,6 +10,7 @@
     "cap:sync": "npm run build && npx cap sync"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^6.0.0",
     "vite": "^5.2.0"
   },
