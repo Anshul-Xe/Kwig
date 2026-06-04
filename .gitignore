@@ -15,6 +15,7 @@ dist-ssr/
 *.zip
 
 # Generated installation packages
+/kwig.apk
 /daily-tracker.apk
 
 # Scratch and environment scripts (due to local path dependencies)
