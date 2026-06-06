@@ -554,14 +554,17 @@ function renderHome() {
   const totals = getHabitTotals(S.pc, S.hc);
 
   const principlesCount = S.principles ? S.principles.length : 0;
-  let activePrincipleText = "No principles set. Tap to add one!";
+  let activePrincipleText = "No principles set. Hold to manage!";
   let index = 0;
   if (principlesCount > 0) {
-    const dayOfYear = Math.floor((_t - new Date(_t.getFullYear(), 0, 0)) / 86400000);
-    index = dayOfYear % principlesCount;
+    if (S.activePrincipleIndex === undefined || S.activePrincipleIndex === null || S.activePrincipleIndex >= principlesCount) {
+      const dayOfYear = Math.floor((_t - new Date(_t.getFullYear(), 0, 0)) / 86400000);
+      S.activePrincipleIndex = dayOfYear % principlesCount;
+    }
+    index = S.activePrincipleIndex;
     activePrincipleText = S.principles[index];
   }
-  const displayPrinciple = activePrincipleText.trim() || "Empty principle. Tap to edit...";
+  const displayPrinciple = activePrincipleText.trim() || "Empty principle. Click to cycle, hold to edit...";
   const fraction = principlesCount > 0 ? `${index + 1}/${principlesCount}` : '0/0';
 
   // Compute weekly habit matrix html
@@ -760,7 +763,16 @@ function renderHome() {
       <div style="font-size:26px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif);line-height:1.2;margin-bottom:24px">${DS}</div>
     </div>
     
-    <div class="tc f2" onclick="goTo('principles')" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-left:3px solid var(--color-text-primary);border-radius:0 8px 8px 0;padding:14px 16px 12px;margin-bottom:24px;cursor:pointer">
+    <div class="tc f2" 
+         onmousedown="window.handlePrinciplePointerStart(event)"
+         onmousemove="window.handlePrinciplePointerMove(event)"
+         onmouseup="window.handlePrinciplePointerEnd()"
+         onmouseleave="window.handlePrinciplePointerEnd()"
+         ontouchstart="window.handlePrinciplePointerStart(event)"
+         ontouchmove="window.handlePrinciplePointerMove(event)"
+         ontouchend="window.handlePrinciplePointerEnd()"
+         onclick="window.handlePrincipleClick(event)"
+         style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-left:3px solid var(--color-text-primary);border-radius:0 8px 8px 0;padding:14px 16px 12px;margin-bottom:24px;cursor:pointer;user-select:none;-webkit-user-select:none;">
       <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px">Principle of the day</div>
       <div id="tt" style="font-size:14px;color:var(--color-text-primary);font-family:var(--font-serif);font-style:italic;line-height:1.65;margin-bottom:10px">&ldquo;${displayPrinciple}&rdquo;</div>
       <div id="th" style="font-size:11px;color:var(--color-text-tertiary);text-align:right">${fraction}</div>
@@ -1126,6 +1138,71 @@ window.addPrinciple = () => {
   S.principles.push("");
   sv('kwig_principles', S.principles);
   render();
+};
+
+let principleHoldTimer = null;
+let principleHoldTriggered = false;
+let pStartX = 0, pStartY = 0;
+
+window.handlePrinciplePointerStart = (e) => {
+  principleHoldTriggered = false;
+  const touch = e.touches ? e.touches[0] : e;
+  pStartX = touch.clientX;
+  pStartY = touch.clientY;
+  
+  if (principleHoldTimer) clearTimeout(principleHoldTimer);
+  principleHoldTimer = setTimeout(() => {
+    principleHoldTriggered = true;
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+    window.goTo('principles');
+  }, 600);
+};
+
+window.handlePrinciplePointerMove = (e) => {
+  if (!principleHoldTimer) return;
+  const touch = e.touches ? e.touches[0] : e;
+  const diffX = Math.abs(touch.clientX - pStartX);
+  const diffY = Math.abs(touch.clientY - pStartY);
+  if (diffX > 10 || diffY > 10) {
+    window.handlePrinciplePointerEnd();
+  }
+};
+
+window.handlePrinciplePointerEnd = () => {
+  if (principleHoldTimer) {
+    clearTimeout(principleHoldTimer);
+    principleHoldTimer = null;
+  }
+};
+
+window.handlePrincipleClick = (e) => {
+  if (principleHoldTriggered) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    principleHoldTriggered = false;
+    return;
+  }
+  window.cyclePrinciple(e);
+};
+
+window.cyclePrinciple = (e) => {
+  if (e) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+  const principlesCount = S.principles ? S.principles.length : 0;
+  if (principlesCount > 1) {
+    if (S.activePrincipleIndex === undefined || S.activePrincipleIndex === null || S.activePrincipleIndex >= principlesCount) {
+      const dayOfYear = Math.floor((_t - new Date(_t.getFullYear(), 0, 0)) / 86400000);
+      S.activePrincipleIndex = dayOfYear % principlesCount;
+    }
+    S.activePrincipleIndex = (S.activePrincipleIndex + 1) % principlesCount;
+    render();
+  }
 };
 
 window.goTo = (p, skipHistory = false) => {
@@ -2337,8 +2414,15 @@ document.addEventListener('touchend', e => {
   const diffX = swipeStartX - e.changedTouches[0].clientX;
   const diffY = Math.abs(swipeStartY - e.changedTouches[0].clientY);
   
-  // Dual-direction swipe back: support left-to-right (standard back) and right-to-left
-  if (Math.abs(diffX) > 60 && diffY < 50) {
+  const container = document.getElementById('app-container') || document.body;
+  const rect = container.getBoundingClientRect();
+  const edgeThreshold = 35; // px from edge
+  const minSwipeDistance = 40; // px of horizontal swipe
+  
+  const isLeftEdgeSwipe = swipeStartX < rect.left + edgeThreshold && diffX < -minSwipeDistance;
+  const isRightEdgeSwipe = swipeStartX > rect.right - edgeThreshold && diffX > minSwipeDistance;
+  
+  if ((isLeftEdgeSwipe || isRightEdgeSwipe) && diffY < 40) {
     window.goBack();
   }
   
