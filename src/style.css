@@ -107,6 +107,8 @@ body {
   background-color: var(--color-background-primary);
   z-index: 10;
   flex-shrink: 0;
+  width: calc(100% - 16px);
+  margin: 0 auto;
 }
 
 .logo-text {

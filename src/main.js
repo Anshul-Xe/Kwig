@@ -789,13 +789,11 @@ function renderHome() {
         <div class="tap" onclick="goTo('productivity')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 8px;border-radius:var(--border-radius-lg) 0 0 var(--border-radius-lg)">
           ${ring(totals.prod, 100, 86, 6, 'var(--color-text-primary)')}
           <div style="font-size:10px;font-weight:600;color:var(--color-text-secondary);letter-spacing:0.07em;text-transform:uppercase">Productivity</div>
-          <div style="font-size:11px;color:var(--color-text-tertiary)">Score: ${totals.prod}%</div>
         </div>
         <div style="width:0.5px;background:var(--color-border-tertiary);margin:12px 0"></div>
         <div class="tap" onclick="goTo('health')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 8px;border-radius:0 var(--border-radius-lg) var(--border-radius-lg) 0">
           ${ring(totals.health, 100, 86, 6, 'var(--color-text-secondary)')}
           <div style="font-size:10px;font-weight:600;color:var(--color-text-secondary);letter-spacing:0.07em;text-transform:uppercase">Health</div>
-          <div style="font-size:11px;color:var(--color-text-tertiary)">Score: ${totals.health}%</div>
         </div>
       </div>
     </div>
