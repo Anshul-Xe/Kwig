@@ -619,11 +619,15 @@ input:checked + .slider-toggle:before {
 
 .profile-sync {
   font-size: 10px;
-  color: var(--color-accent-green);
+  color: var(--color-text-tertiary);
   display: flex;
   align-items: center;
   gap: 3px;
   font-weight: 500;
+}
+
+.profile-sync.active {
+  color: var(--color-accent-green);
 }
 
 .sidebar-menu {
