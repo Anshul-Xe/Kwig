@@ -59,7 +59,12 @@
         <!-- Sub-list of pages (rendered dynamically by JS) -->
         <div id="sidebar-pages-list" class="sidebar-pages-sublist"></div>
 
-        <div class="sidebar-section">Account</div>
+        <div class="sidebar-section" style="display:flex; align-items:center; justify-content:space-between; width:100%; padding-right:6px; box-sizing:border-box;">
+          <span>Account</span>
+          <button id="sb-account-settings" onclick="event.preventDefault(); event.stopPropagation(); window.showClientConfigModal();" style="background:none; border:none; color:var(--color-text-tertiary); padding:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; outline:none;" title="Configure Google Client ID">
+            <i class="ti ti-settings" style="font-size:12px;"></i>
+          </button>
+        </div>
         <div id="sidebar-account-container"></div>
       </div>
     </aside>
@@ -90,6 +95,21 @@
         <div class="modal-buttons">
           <button id="modal-cancel-btn" class="modal-btn modal-btn-cancel">Cancel</button>
           <button id="modal-confirm-btn" class="modal-btn modal-btn-delete">Yes, Remove</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Client ID Configuration Modal -->
+    <div id="client-config-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-title">Google Client ID Config</div>
+        <div class="modal-desc" style="margin-bottom:12px; font-size:11px; line-height:1.4; color:var(--color-text-tertiary);">
+          To sync with Google Drive, enter a Web Client ID from your Google Cloud Console. Make sure <strong>https://localhost</strong> is added as an Authorized Redirect URI.
+        </div>
+        <input type="text" id="oauth-client-id-input" style="width:100%; padding:10px; border-radius:var(--border-radius-md); border:0.5px solid var(--color-border-secondary); background:var(--color-background-primary); color:var(--color-text-primary); font-family:var(--font-sans); font-size:12px; box-sizing:border-box; outline:none; margin-bottom:16px;" placeholder="Paste your Client ID here...">
+        <div class="modal-buttons">
+          <button onclick="window.closeClientConfigModal()" class="modal-btn modal-btn-cancel">Cancel</button>
+          <button onclick="window.saveClientConfigId()" class="modal-btn" style="background:var(--color-text-primary); color:var(--color-background-primary); border:none; border-radius:var(--border-radius-md); padding:8px 16px; cursor:pointer; font-weight:600; font-size:12px;">Save Config</button>
         </div>
       </div>
     </div>

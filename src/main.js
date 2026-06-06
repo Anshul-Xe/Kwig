@@ -224,6 +224,7 @@ async function loadAll() {
   S.pages = await ld('kwig_pages', []);
   S.deleted_defaults = await ld('deleted_defaults', []);
   S.sidebarExpanded = await ld('sidebarExpanded', false);
+  S.gdriveClientId = await ld('gdrive_client_id', '910899479357-oeqhpsg705kspesph1m6q10411r1h25o.apps.googleusercontent.com');
   
   // Parse Google OAuth redirect hash if present
   if (window.location.hash.includes('access_token=')) {
@@ -1057,6 +1058,37 @@ window.logoutGoogleDrive = async () => {
   alert("Signed out from Google Account.");
 };
 
+window.showClientConfigModal = () => {
+  const modal = document.getElementById('client-config-modal');
+  const input = document.getElementById('oauth-client-id-input');
+  if (modal && input) {
+    input.value = S.gdriveClientId || '';
+    modal.classList.add('active');
+  }
+};
+
+window.closeClientConfigModal = () => {
+  const modal = document.getElementById('client-config-modal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+};
+
+window.saveClientConfigId = () => {
+  const input = document.getElementById('oauth-client-id-input');
+  if (input) {
+    const val = input.value.trim();
+    if (!val) {
+      alert("Please enter a valid Google Client ID.");
+      return;
+    }
+    S.gdriveClientId = val;
+    sv('gdrive_client_id', val);
+    window.closeClientConfigModal();
+    alert("Google Client ID saved successfully!\nYou can now sign in with Google.");
+  }
+};
+
 window.renderAccountSync = () => {
   const container = document.getElementById('sidebar-account-container');
   if (!container) return;
@@ -1757,11 +1789,13 @@ let swipeStartY = null;
 
 document.addEventListener('touchstart', e => {
   if (e.target.closest('input[type="range"]') || e.target.closest('.switch') || e.target.closest('img')) {
+    swipeStartX = null;
+    swipeStartY = null;
     return;
   }
   swipeStartX = e.touches[0].clientX;
   swipeStartY = e.touches[0].clientY;
-}, { passive: true });
+}, true);
 
 document.addEventListener('touchend', e => {
   if (swipeStartX === null || swipeStartY === null) return;
@@ -1776,7 +1810,7 @@ document.addEventListener('touchend', e => {
   
   swipeStartX = null;
   swipeStartY = null;
-}, { passive: true });
+}, true);
 
 // Initial run
 render();
