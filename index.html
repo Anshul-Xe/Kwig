@@ -47,25 +47,30 @@
           <span>The Void</span>
           <button class="sb-add-btn" onclick="event.stopPropagation(); window.createNewPage();" title="Add new note">+</button>
         </div>
-        <a href="#" class="sidebar-item" id="sb-void-mgr" onclick="event.preventDefault(); window.goTo('notes'); window.closeSidebar();">
-          <i class="ti ti-folder-open" aria-hidden="true"></i> Note Pages
-        </a>
+        <div style="display:flex; align-items:center; justify-content:space-between; width:100%; padding-right:6px; box-sizing:border-box;">
+          <a href="#" class="sidebar-item" id="sb-void-mgr" style="flex:1;" onclick="event.preventDefault(); window.goTo('notes'); window.closeSidebar();">
+            <i class="ti ti-folder-open" aria-hidden="true"></i> Note Pages
+          </a>
+          <button id="sb-void-toggle" onclick="event.preventDefault(); event.stopPropagation(); window.toggleSidebarPages();" style="background:none; border:none; color:var(--color-text-tertiary); padding:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; outline:none; margin-left:4px;" title="Toggle notes list">
+            <i class="ti ti-chevron-down" id="sb-void-chevron" style="font-size:12px; transition:transform 0.2s;"></i>
+          </button>
+        </div>
         
         <!-- Sub-list of pages (rendered dynamically by JS) -->
         <div id="sidebar-pages-list" class="sidebar-pages-sublist"></div>
 
         <div class="sidebar-section">Account</div>
-        <a href="#" class="sidebar-item" id="sb-sync" onclick="event.preventDefault(); window.showSyncAlert();">
-          <i class="ti ti-cloud-upload" aria-hidden="true"></i> Drive Auto-Sync
-        </a>
+        <div id="sidebar-account-container"></div>
       </div>
     </aside>
     
     <!-- Permanent Mobile Native Header with Theme Toggle -->
     <header class="app-header">
-      <div class="logo-text" id="menu-btn" style="cursor:pointer" onclick="window.openSidebar()">
-        <i class="ti ti-menu-2" aria-hidden="true" style="font-size: 18px; transition: transform 0.2s;"></i>
-        <span style="font-family: 'Cinzel', serif; font-weight: 600; letter-spacing: 0.05em; font-size: 15px;">Kwig</span>
+      <div class="logo-text">
+        <button id="menu-btn" aria-label="Open sidebar menu" style="background:none; border:none; color:inherit; cursor:pointer; padding:6px 8px; margin-left:-8px; display:inline-flex; align-items:center; justify-content:center; outline:none; -webkit-tap-highlight-color:transparent;" onclick="window.openSidebar()">
+          <i class="ti ti-menu-2" aria-hidden="true" style="font-size: 18px; transition: transform 0.2s;"></i>
+        </button>
+        <span style="font-family: 'Cinzel', serif; font-weight: 600; letter-spacing: 0.05em; font-size: 15px; user-select:none; cursor:default;">Kwig</span>
       </div>
       <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
         <i class="ti ti-moon" id="theme-icon" aria-hidden="true"></i>
@@ -87,6 +92,20 @@
           <button id="modal-confirm-btn" class="modal-btn modal-btn-delete">Yes, Remove</button>
         </div>
       </div>
+    </div>
+
+    <!-- Floating Image Control Overlay -->
+    <div id="image-control-bubble" class="image-control-bubble" style="display:none; position:absolute; z-index:1000; align-items:center; gap:4px;">
+      <button class="bubble-btn" onclick="window.resizeSelectedImage('25%')">25%</button>
+      <button class="bubble-btn" onclick="window.resizeSelectedImage('50%')">50%</button>
+      <button class="bubble-btn" onclick="window.resizeSelectedImage('75%')">75%</button>
+      <button class="bubble-btn" onclick="window.resizeSelectedImage('100%')">100%</button>
+      <div class="bubble-divider"></div>
+      <button class="bubble-btn icon-btn" onclick="window.alignSelectedImage('left')" title="Align Left"><i class="ti ti-align-left"></i></button>
+      <button class="bubble-btn icon-btn" onclick="window.alignSelectedImage('center')" title="Align Center"><i class="ti ti-align-center"></i></button>
+      <button class="bubble-btn icon-btn" onclick="window.alignSelectedImage('right')" title="Align Right"><i class="ti ti-align-right"></i></button>
+      <div class="bubble-divider"></div>
+      <button class="bubble-btn bubble-delete icon-btn" onclick="window.deleteSelectedImage()" title="Delete Image"><i class="ti ti-trash"></i></button>
     </div>
 
   </div>

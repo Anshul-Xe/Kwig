@@ -1,5 +1,7 @@
 /* Core Application Logic for Kwig Mobile App */
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { App } from '@capacitor/app';
+
 
 // 1. Storage Bridge (Fallback to localStorage when window.storage is not provided)
 if (!window.storage) {
@@ -110,6 +112,10 @@ let S = {
   as: null,
   wd: null,
   db: null,
+  history: [],          // Navigation history stack
+  sidebarExpanded: false, // Sidebar folder dropdown expanded
+  gdriveToken: null,    // Google Drive access token
+  gdriveClientId: '910899479357-oeqhpsg705kspesph1m6q10411r1h25o.apps.googleusercontent.com', // Default OAuth Client ID
   notifiers: {
     water: { enabled: false, interval: 1 },
     walk: { enabled: false, interval: 1 }
@@ -217,6 +223,22 @@ async function loadAll() {
   S.ch = await ld('ch', []);
   S.pages = await ld('kwig_pages', []);
   S.deleted_defaults = await ld('deleted_defaults', []);
+  S.sidebarExpanded = await ld('sidebarExpanded', false);
+  
+  // Parse Google OAuth redirect hash if present
+  if (window.location.hash.includes('access_token=')) {
+    const params = new URLSearchParams(window.location.hash.substring(1));
+    const token = params.get('access_token');
+    if (token) {
+      S.gdriveToken = token;
+      await sv('gdrive_token', token);
+      // Clean url hash without reloading
+      history.replaceState(null, null, ' ');
+    }
+  } else {
+    S.gdriveToken = await ld('gdrive_token', null);
+  }
+  
   S.notifiers = await ld('notifiers', {
     water: { enabled: false, interval: 1 },
     walk: { enabled: false, interval: 1 }
@@ -227,8 +249,10 @@ async function loadAll() {
     setupWebTimers();
   }
   
-  // Render initial pages links inside sidebar drawer
+  // Render initial items inside sidebar drawer
   renderSidebarPages();
+  window.renderAccountSync();
+  window.updateSidebarToggleUI();
 }
 
 const si = () => [...SB, ...S.cs].filter(i => !S.deleted_defaults.includes(i.id));
@@ -775,7 +799,14 @@ function render() {
   else if (S.page === 'editor') app.innerHTML = renderEditor();
 }
 
-window.goTo = p => {
+window.goTo = (p, skipHistory = false) => {
+  const bubble = document.getElementById('image-control-bubble');
+  if (bubble) bubble.style.display = 'none';
+
+  if (!skipHistory && S.page !== p) {
+    S.history.push(S.page);
+  }
+
   S.page = p;
   S.as = null;
   render();
@@ -945,6 +976,8 @@ window.openSidebar = () => {
   document.getElementById('sidebar-overlay').classList.add('active');
   document.getElementById('menu-btn').querySelector('i').style.transform = 'rotate(90deg)';
   renderSidebarPages();
+  window.renderAccountSync();
+  window.updateSidebarToggleUI();
 };
 
 window.closeSidebar = () => {
@@ -957,6 +990,7 @@ function renderSidebarPages() {
   const listEl = document.getElementById('sidebar-pages-list');
   if (!listEl) return;
   
+  // Render sublist contents (CSS manages expand/collapse height animations)
   listEl.innerHTML = S.pages.map(p => {
     const isActive = S.page === 'editor' && S.activePageId === p.id;
     return `<a href="#" class="sidebar-page-item ${isActive ? 'active' : ''}" onclick="event.preventDefault(); window.openPage('${p.id}'); window.closeSidebar();">
@@ -965,8 +999,216 @@ function renderSidebarPages() {
   }).join('');
 }
 
-window.showSyncAlert = () => {
-  alert("Cloud Sync Integration:\nThis will connect to your Google Drive account, allowing Kwig databases to auto-sync and backup files privately under your custom Drive storage folder.");
+window.toggleSidebarPages = () => {
+  S.sidebarExpanded = !S.sidebarExpanded;
+  sv('sidebarExpanded', S.sidebarExpanded);
+  window.updateSidebarToggleUI();
+};
+
+window.updateSidebarToggleUI = () => {
+  const sublist = document.getElementById('sidebar-pages-list');
+  const chevron = document.getElementById('sb-void-chevron');
+  if (sublist && chevron) {
+    if (S.sidebarExpanded) {
+      sublist.classList.add('expanded');
+      chevron.classList.remove('collapsed');
+      renderSidebarPages();
+    } else {
+      sublist.classList.remove('expanded');
+      chevron.classList.add('collapsed');
+    }
+  }
+};
+
+// Google Drive OAuth & REST Sync Functions
+async function findBackupFileId() {
+  try {
+    const res = await fetch("https://www.googleapis.com/drive/v3/files?q=name='kwig_backup.json'+and+trashed=false", {
+      headers: { 'Authorization': `Bearer ${S.gdriveToken}` }
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        alert("Google session has expired. Redirecting to Google Login...");
+        window.startGoogleDriveLogin();
+        return null;
+      }
+      throw new Error("Drive response status " + res.status);
+    }
+    const data = await res.json();
+    return data.files && data.files.length > 0 ? data.files[0].id : null;
+  } catch (e) {
+    console.error("Error finding backup file:", e);
+    throw e;
+  }
+}
+
+window.startGoogleDriveLogin = () => {
+  const useCustom = confirm("Would you like to enter a custom Google Client ID?\n(Click Cancel to use Kwig's default Google client ID for standard testing)");
+  let clientId = S.gdriveClientId;
+  if (useCustom) {
+    const input = prompt("Enter your Google Client ID:", S.gdriveClientId);
+    if (input && input.trim()) {
+      clientId = input.trim();
+      S.gdriveClientId = clientId;
+      sv('gdrive_client_id', clientId);
+    } else {
+      return;
+    }
+  }
+  
+  const redirectUri = 'https://localhost';
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent('https://www.googleapis.com/auth/drive.file')}&prompt=select_account`;
+  
+  window.location.href = authUrl;
+};
+
+window.logoutGoogleDrive = async () => {
+  S.gdriveToken = null;
+  await sv('gdrive_token', null);
+  window.renderAccountSync();
+  alert("Signed out from Google Account.");
+};
+
+window.renderAccountSync = () => {
+  const container = document.getElementById('sidebar-account-container');
+  if (!container) return;
+  
+  if (!S.gdriveToken) {
+    container.innerHTML = `
+      <a href="#" class="sidebar-item" id="sb-sync-login" onclick="event.preventDefault(); window.startGoogleDriveLogin();">
+        <i class="ti ti-brand-google" aria-hidden="true"></i> Sign In with Google
+      </a>
+    `;
+  } else {
+    container.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:4px; padding: 2px 4px;">
+        <a href="#" class="sidebar-item" id="sb-sync-upload" onclick="event.preventDefault(); window.syncToGoogleDrive();" style="padding: 6px 10px; background: rgba(56, 176, 0, 0.08);">
+          <i class="ti ti-cloud-upload" aria-hidden="true" style="color:var(--color-accent-green)"></i> Sync to Drive
+        </a>
+        <a href="#" class="sidebar-item" id="sb-sync-download" onclick="event.preventDefault(); window.syncFromGoogleDrive();" style="padding: 6px 10px;">
+          <i class="ti ti-cloud-download" aria-hidden="true" style="color:var(--color-accent-blue)"></i> Restore from Drive
+        </a>
+        <a href="#" class="sidebar-item" id="sb-sync-logout" onclick="event.preventDefault(); window.logoutGoogleDrive();" style="font-size:11px; padding:4px 10px; color:var(--color-text-tertiary); margin-top:2px;">
+          <i class="ti ti-logout" aria-hidden="true" style="font-size:12px;"></i> Sign Out
+        </a>
+      </div>
+    `;
+  }
+};
+
+window.syncToGoogleDrive = async () => {
+  if (!S.gdriveToken) {
+    alert("Please sign in with Google first.");
+    return;
+  }
+  
+  const btn = document.getElementById('sb-sync-upload');
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) btn.innerHTML = '<i class="ti ti-loader rotate" style="display:inline-block; animation:spin 1s linear infinite;" aria-hidden="true"></i> Syncing...';
+  
+  try {
+    const fileId = await findBackupFileId();
+    
+    // Backup all of localStorage
+    const backupData = {
+      version: 2,
+      timestamp: new Date().toISOString(),
+      localStorage: {}
+    };
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      backupData.localStorage[k] = localStorage.getItem(k);
+    }
+    
+    let res;
+    if (fileId) {
+      res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${S.gdriveToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(backupData)
+      });
+    } else {
+      const createMetaRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${S.gdriveToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: 'kwig_backup.json',
+          mimeType: 'application/json'
+        })
+      });
+      if (!createMetaRes.ok) throw new Error("Failed to initialize Google Drive backup space.");
+      const meta = await createMetaRes.json();
+      
+      res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${meta.id}?uploadType=media`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${S.gdriveToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(backupData)
+      });
+    }
+    
+    if (!res.ok) throw new Error(`Google Drive API upload status: ${res.status}`);
+    alert("Data successfully backed up to your Google Drive! (kwig_backup.json)");
+  } catch (err) {
+    console.error("Cloud backup sync error:", err);
+    alert("Cloud Sync failed:\n" + err.message + "\n\nTip: Signing out and back in to refresh credentials can fix authorization errors.");
+  } finally {
+    if (btn) btn.innerHTML = originalHtml;
+    window.renderAccountSync();
+  }
+};
+
+window.syncFromGoogleDrive = async () => {
+  if (!S.gdriveToken) {
+    alert("Please sign in with Google first.");
+    return;
+  }
+  
+  const btn = document.getElementById('sb-sync-download');
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) btn.innerHTML = '<i class="ti ti-loader rotate" style="display:inline-block; animation:spin 1s linear infinite;" aria-hidden="true"></i> Restoring...';
+  
+  try {
+    const fileId = await findBackupFileId();
+    if (!fileId) {
+      alert("No backup file (kwig_backup.json) found on your Google Drive. Backup your current data first!");
+      return;
+    }
+    
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { 'Authorization': `Bearer ${S.gdriveToken}` }
+    });
+    if (!res.ok) throw new Error("Failed to fetch backup file from Drive.");
+    
+    const backupData = await res.json();
+    if (!backupData || !backupData.localStorage) throw new Error("Malformed backup data.");
+    
+    const count = Object.keys(backupData.localStorage).length;
+    const dateStr = new Date(backupData.timestamp || Date.now()).toLocaleString();
+    
+    if (confirm(`Backup found from: ${dateStr}\n\nThis will restore ${count} keys and overwrite all current habits, logs, and notes on this device. Do you want to proceed?`)) {
+      localStorage.clear();
+      for (const [key, val] of Object.entries(backupData.localStorage)) {
+        localStorage.setItem(key, val);
+      }
+      alert("Data successfully restored from Google Drive! Restarting application...");
+      window.location.reload();
+    }
+  } catch (err) {
+    console.error("Cloud download sync error:", err);
+    alert("Failed to restore backup:\n" + err.message);
+  } finally {
+    if (btn) btn.innerHTML = originalHtml;
+    window.renderAccountSync();
+  }
 };
 
 // 9. Notes Page Manager State functions
@@ -1000,6 +1242,7 @@ window.openPage = id => {
     contentArea.addEventListener('mouseup', cacheSelection);
     contentArea.addEventListener('touchend', cacheSelection);
     contentArea.focus();
+    bindEditorImageEvents();
   }
 };
 
@@ -1016,9 +1259,170 @@ window.saveEditorContent = () => {
   const page = S.pages.find(p => p.id === S.activePageId);
   const contentArea = document.getElementById('editor-content');
   if (page && contentArea) {
+    bindEditorImageEvents();
     page.content = contentArea.innerHTML;
     sv('kwig_pages', S.pages);
   }
+};
+
+// Custom Image Resizing & Drag Event Bindings inside contenteditable
+let selectedImg = null;
+
+function bindEditorImageEvents() {
+  const contentArea = document.getElementById('editor-content');
+  if (!contentArea) return;
+  
+  contentArea.querySelectorAll('img').forEach(img => {
+    if (img.dataset.bound) return;
+    img.dataset.bound = "true";
+    
+    // Tap to select / show resize controls
+    img.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.selectEditorImage(img);
+    });
+    
+    // Drag-to-position touch logic
+    let dragActive = false;
+    
+    img.addEventListener('touchstart', e => {
+      dragActive = true;
+      img.classList.add('dragging-image');
+      window.hideImageBubble();
+    }, { passive: true });
+    
+    img.addEventListener('touchmove', e => {
+      if (!dragActive) return;
+      const touch = e.touches[0];
+      
+      if (e.cancelable) e.preventDefault(); // block viewport scrolling while dragging
+      
+      let range;
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(touch.clientX, touch.clientY);
+      } else if (document.caretPositionFromPoint) {
+        let pos = document.caretPositionFromPoint(touch.clientX, touch.clientY);
+        if (pos) {
+          range = document.createRange();
+          range.setStart(pos.offsetNode, pos.offset);
+          range.collapse(true);
+        }
+      }
+      
+      if (range && contentArea.contains(range.startContainer)) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    }, { passive: false });
+    
+    img.addEventListener('touchend', e => {
+      if (!dragActive) return;
+      dragActive = false;
+      img.classList.remove('dragging-image');
+      
+      const touch = e.changedTouches[0];
+      let range;
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(touch.clientX, touch.clientY);
+      } else if (document.caretPositionFromPoint) {
+        let pos = document.caretPositionFromPoint(touch.clientX, touch.clientY);
+        if (pos) {
+          range = document.createRange();
+          range.setStart(pos.offsetNode, pos.offset);
+          range.collapse(true);
+        }
+      }
+      
+      if (range && contentArea.contains(range.startContainer)) {
+        range.insertNode(img);
+        window.saveEditorContent();
+        setTimeout(() => window.selectEditorImage(img), 100);
+      }
+    }, { passive: true });
+  });
+}
+
+window.selectEditorImage = img => {
+  window.hideImageBubble();
+  selectedImg = img;
+  img.classList.add('selected-image');
+  
+  const bubble = document.getElementById('image-control-bubble');
+  const appContainer = document.getElementById('app-container');
+  if (!bubble || !appContainer) return;
+  
+  // Highlight active preset button
+  bubble.querySelectorAll('.bubble-btn').forEach(btn => {
+    btn.classList.remove('active');
+    if (img.style.width === btn.textContent) {
+      btn.classList.add('active');
+    }
+  });
+  
+  const containerRect = appContainer.getBoundingClientRect();
+  const imgRect = img.getBoundingClientRect();
+  
+  bubble.style.display = 'flex';
+  
+  const bubbleHeight = bubble.offsetHeight;
+  const bubbleWidth = bubble.offsetWidth;
+  
+  let top = imgRect.top - containerRect.top - bubbleHeight - 6;
+  let left = imgRect.left - containerRect.left + (imgRect.width - bubbleWidth) / 2;
+  
+  if (top < 0) top = imgRect.bottom - containerRect.top + 6;
+  if (left < 0) left = 6;
+  if (left + bubbleWidth > containerRect.width) left = containerRect.width - bubbleWidth - 6;
+  
+  bubble.style.top = `${top}px`;
+  bubble.style.left = `${left}px`;
+};
+
+window.hideImageBubble = () => {
+  const bubble = document.getElementById('image-control-bubble');
+  if (bubble) bubble.style.display = 'none';
+  if (selectedImg) {
+    selectedImg.classList.remove('selected-image');
+    selectedImg = null;
+  }
+};
+
+window.resizeSelectedImage = widthPct => {
+  if (!selectedImg) return;
+  selectedImg.style.width = widthPct;
+  selectedImg.style.height = 'auto';
+  window.saveEditorContent();
+  setTimeout(() => {
+    if (selectedImg) window.selectEditorImage(selectedImg);
+  }, 50);
+};
+
+window.alignSelectedImage = alignment => {
+  if (!selectedImg) return;
+  selectedImg.style.display = 'block';
+  if (alignment === 'left') {
+    selectedImg.style.marginLeft = '0';
+    selectedImg.style.marginRight = 'auto';
+  } else if (alignment === 'center') {
+    selectedImg.style.marginLeft = 'auto';
+    selectedImg.style.marginRight = 'auto';
+  } else if (alignment === 'right') {
+    selectedImg.style.marginLeft = 'auto';
+    selectedImg.style.marginRight = '0';
+  }
+  window.saveEditorContent();
+  setTimeout(() => {
+    if (selectedImg) window.selectEditorImage(selectedImg);
+  }, 50);
+};
+
+window.deleteSelectedImage = () => {
+  if (!selectedImg) return;
+  selectedImg.remove();
+  window.hideImageBubble();
+  window.saveEditorContent();
 };
 
 window.confirmDeletePage = (id, name) => {
@@ -1330,6 +1734,58 @@ document.addEventListener('paste', e => {
   }
   // Standard text pasting runs default browser behavior and updates local state oninput
 });
+
+// Setup global click listener to clear image selection bubble when tapping outside
+document.addEventListener('click', e => {
+  if (S.page !== 'editor') return;
+  if (e.target.closest('#image-control-bubble') || e.target.tagName === 'IMG') {
+    return;
+  }
+  window.hideImageBubble();
+});
+
+// window.goBack handles back navigation and app exit
+window.goBack = () => {
+  if (S.page === 'home') {
+    App.exitApp().catch(err => {
+      console.warn("App exit failed:", err);
+    });
+    return;
+  }
+  
+  let prev = S.history.pop();
+  if (!prev || prev === S.page) {
+    prev = 'home';
+  }
+  window.goTo(prev, true);
+};
+
+// Global Touch Swipe-Back Gesture listener
+let swipeStartX = null;
+let swipeStartY = null;
+
+document.addEventListener('touchstart', e => {
+  if (e.target.closest('input[type="range"]') || e.target.closest('.switch') || e.target.closest('img')) {
+    return;
+  }
+  swipeStartX = e.touches[0].clientX;
+  swipeStartY = e.touches[0].clientY;
+}, { passive: true });
+
+document.addEventListener('touchend', e => {
+  if (swipeStartX === null || swipeStartY === null) return;
+  
+  const diffX = swipeStartX - e.changedTouches[0].clientX;
+  const diffY = Math.abs(swipeStartY - e.changedTouches[0].clientY);
+  
+  // Right-to-left swipe (swiping leftwards) triggers goBack
+  if (diffX > 80 && diffY < 60) {
+    window.goBack();
+  }
+  
+  swipeStartX = null;
+  swipeStartY = null;
+}, { passive: true });
 
 // Initial run
 render();

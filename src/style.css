@@ -876,3 +876,130 @@ input:checked + .slider-toggle:before {
   color: var(--color-accent-red);
   background-color: rgba(224, 97, 67, 0.15);
 }
+
+/* Image resizing selection & drag indicator */
+.editor-content-area img {
+  position: relative;
+  transition: outline 0.15s, opacity 0.15s;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.editor-content-area img.selected-image {
+  outline: 2.5px solid var(--color-text-primary);
+  outline-offset: 2px;
+}
+
+.editor-content-area img.dragging-image {
+  opacity: 0.4;
+  outline: 2px dashed var(--color-text-secondary);
+}
+
+/* Floating Image Control Bubble */
+.image-control-bubble {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 4px 16px var(--color-shadow);
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transform: translateY(-4px);
+  animation: bubble-fade-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes bubble-fade-in {
+  from { opacity: 0; transform: translateY(0); }
+  to { opacity: 1; transform: translateY(-4px); }
+}
+
+.bubble-btn {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+  font-family: var(--font-sans);
+}
+
+.bubble-btn:hover {
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.bubble-btn.active {
+  background-color: var(--color-text-primary);
+  color: var(--color-background-primary);
+}
+
+.bubble-btn.icon-btn {
+  padding: 4px 6px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bubble-delete {
+  color: var(--color-accent-red);
+}
+
+.bubble-delete:hover {
+  background-color: rgba(224, 97, 67, 0.15);
+  color: var(--color-accent-red);
+}
+
+.bubble-divider {
+  width: 0.5px;
+  height: 14px;
+  background-color: var(--color-border-tertiary);
+  margin: 0 4px;
+}
+
+/* Caret insertion drop point line indicator */
+.drag-caret-indicator {
+  border-left: 2px solid var(--color-text-primary);
+  margin-left: -1px;
+  animation: blink 0.8s infinite;
+  display: inline-block;
+  height: 18px;
+  vertical-align: middle;
+}
+
+/* Sidebar chevron transitions */
+#sb-void-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+/* Sidebar pages collapsable sub-list transitions */
+.sidebar-pages-sublist {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease, padding 0.25s ease;
+  padding-left: 18px;
+  margin: 0;
+  border-left: 0.5px solid var(--color-border-tertiary);
+  display: flex !important; /* overrides previous display overrides */
+}
+
+.sidebar-pages-sublist.expanded {
+  max-height: 500px; /* fluid height */
+  opacity: 1;
+  margin: 2px 0 6px;
+}
+
+/* Read-only cursor for logo title */
+.logo-text span {
+  cursor: default;
+  user-select: none;
+}
+
