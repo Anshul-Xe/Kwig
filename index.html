@@ -8,7 +8,7 @@
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;1,400&family=Cinzel:wght@500;600;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;1,400&family=Cinzel:wght@500;600;700&family=Silkscreen:wght@400;700&family=Nanum+Pen+Script&display=swap" rel="stylesheet">
   
   <!-- Tabler Icons -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
@@ -75,14 +75,12 @@
     </aside>
     
     <!-- Permanent Mobile Native Header with Theme Toggle -->
-    <header class="app-header">
-      <div class="logo-text">
-        <button id="menu-btn" aria-label="Open sidebar menu" style="background:none; border:none; color:inherit; cursor:pointer; padding:6px 8px; margin-left:-8px; display:inline-flex; align-items:center; justify-content:center; outline:none; -webkit-tap-highlight-color:transparent;" onclick="window.openSidebar()">
-          <i class="ti ti-menu-2" aria-hidden="true" style="font-size: 18px; transition: transform 0.2s;"></i>
-        </button>
-        <span style="font-family: 'Silkscreen', sans-serif; font-weight: 700; letter-spacing: 0.05em; font-size: 14px; user-select:none; cursor:default;">Kwig</span>
-      </div>
-      <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
+    <header class="app-header" style="position: relative;">
+      <button id="menu-btn" aria-label="Open sidebar menu" style="background:none; border:none; color:inherit; cursor:pointer; padding:6px 8px; margin-left:-8px; display:inline-flex; align-items:center; justify-content:center; outline:none; -webkit-tap-highlight-color:transparent;" onclick="window.openSidebar()">
+        <i class="ti ti-menu-2" aria-hidden="true" style="font-size: 18px; transition: transform 0.2s;"></i>
+      </button>
+      <span class="app-title-header" style="font-family: 'Nanum Pen Script', cursive; font-size: 26px; user-select:none; cursor:default; position: absolute; left: 50%; transform: translateX(-50%); color: var(--color-title-faded); letter-spacing: 0.05em; font-weight: 600;">Kwig</span>
+      <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark mode" style="margin-right:-8px;">
         <i class="ti ti-moon" id="theme-icon" aria-hidden="true"></i>
       </button>
     </header>
