@@ -253,6 +253,7 @@ async function loadAll() {
     "Prioritize health.",
     "Consistency beats intensity."
   ]);
+  S.username = await ld('kwig_username', 'Kwig User');
   
   // Parse Google OAuth redirect hash if present
   if (window.location.hash.includes('access_token=')) {
@@ -554,12 +555,14 @@ function renderHome() {
 
   const principlesCount = S.principles ? S.principles.length : 0;
   let activePrincipleText = "No principles set. Tap to add one!";
+  let index = 0;
   if (principlesCount > 0) {
     const dayOfYear = Math.floor((_t - new Date(_t.getFullYear(), 0, 0)) / 86400000);
-    const index = dayOfYear % principlesCount;
+    index = dayOfYear % principlesCount;
     activePrincipleText = S.principles[index];
   }
   const displayPrinciple = activePrincipleText.trim() || "Empty principle. Tap to edit...";
+  const fraction = principlesCount > 0 ? `${index + 1}/${principlesCount}` : '0/0';
 
   // Compute weekly habit matrix html
   const mHabits = (() => {
@@ -759,8 +762,8 @@ function renderHome() {
     
     <div class="tc f2" onclick="goTo('principles')" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-left:3px solid var(--color-text-primary);border-radius:0 8px 8px 0;padding:14px 16px 12px;margin-bottom:24px;cursor:pointer">
       <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px">Principle of the day</div>
-      <div id="tt" style="font-size:12px;color:var(--color-text-primary);font-family:'Silkscreen', monospace;line-height:1.6;margin-bottom:10px">&ldquo;${displayPrinciple}&rdquo;</div>
-      <div id="th" style="font-size:10px;color:var(--color-text-tertiary);text-align:right;font-family:'Silkscreen', monospace;">Tap to manage principles</div>
+      <div id="tt" style="font-size:14px;color:var(--color-text-primary);font-family:var(--font-serif);font-style:italic;line-height:1.65;margin-bottom:10px">&ldquo;${displayPrinciple}&rdquo;</div>
+      <div id="th" style="font-size:11px;color:var(--color-text-tertiary);text-align:right">${fraction}</div>
     </div>
     
     <div class="f3">
@@ -1054,7 +1057,7 @@ function renderPrinciples() {
   const listHtml = S.principles.map((pr, idx) => `
     <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px 12px;">
       <textarea oninput="window.updatePrinciple(${idx}, this.value)" 
-                style="flex:1;background:transparent;border:none;outline:none;color:var(--color-text-primary);font-family:'Silkscreen', monospace;font-size:11px;line-height:1.5;resize:none;height:48px;padding:0;margin:0;"
+                style="flex:1;background:transparent;border:none;outline:none;color:var(--color-text-primary);font-family:var(--font-sans);font-size:13px;line-height:1.5;resize:none;height:48px;padding:0;margin:0;"
                 placeholder="Enter principle...">${pr}</textarea>
       <button onclick="window.deletePrinciple(${idx})" 
               style="background:none;border:none;color:var(--color-accent-red);cursor:pointer;padding:4px;display:flex;align-items:center;justify-content:center;outline:none;" 
@@ -1065,7 +1068,7 @@ function renderPrinciples() {
   `).join('');
 
   const empty = S.principles.length === 0 ? `
-    <div style="padding:48px 0; text-align:center; color:var(--color-text-tertiary); font-family:'Silkscreen', monospace; font-size:10px;">
+    <div style="padding:48px 0; text-align:center; color:var(--color-text-tertiary); font-family:var(--font-sans); font-size:12px;">
       No principles found.<br>Click the button below to add one.
     </div>
   ` : listHtml;
@@ -1080,7 +1083,7 @@ function renderPrinciples() {
         <div style="font-size:20px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif)">Principles</div>
         <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px;">Your personal life compass</div>
       </div>
-      <button class="add-btn" onclick="window.addPrinciple()" style="font-family:'Silkscreen', monospace; font-size:10px; padding: 4px 8px;">+ Add Principle</button>
+      <button class="add-btn" onclick="window.addPrinciple()" style="font-family:var(--font-sans); font-size:11px; padding: 4px 8px;">+ Add Principle</button>
     </div>
     
     <div style="margin-top:10px;">
@@ -1373,11 +1376,28 @@ window.saveConsoleWeights = async (type, val) => {
   render();
 };
 
+window.editUsername = () => {
+  const newName = prompt("Enter new username:", S.username || "Kwig User");
+  if (newName !== null) {
+    const trimmed = newName.trim();
+    if (trimmed) {
+      S.username = trimmed;
+      sv('kwig_username', S.username);
+      const el = document.getElementById('username-display');
+      if (el) el.textContent = trimmed;
+    }
+  }
+};
+
 // 8. Sidebar & Drive Alert functions
 window.openSidebar = () => {
   document.getElementById('sidebar').classList.add('active');
   document.getElementById('sidebar-overlay').classList.add('active');
   document.getElementById('menu-btn').querySelector('i').style.transform = 'rotate(90deg)';
+  
+  const el = document.getElementById('username-display');
+  if (el) el.textContent = S.username || 'Kwig User';
+  
   renderSidebarPages();
   window.renderAccountSync();
   window.updateSidebarToggleUI();
