@@ -533,3 +533,346 @@ input:checked + .slider-toggle:before {
   50% { transform: scale(0.985); background-color: var(--color-background-secondary); }
   100% { transform: scale(1); }
 }
+
+/* Slide-in Navigation Sidebar Styles */
+.sidebar-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 99;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 250px;
+  background: var(--color-background-primary);
+  border-right: 0.5px solid var(--color-border-secondary);
+  z-index: 100;
+  transform: translateX(-100%);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+.sidebar.active {
+  transform: translateX(0);
+}
+
+.sidebar-header {
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+
+.sidebar-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background: var(--color-text-primary);
+  color: var(--color-background-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  font-family: 'Cinzel', serif;
+}
+
+.sidebar-profile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.profile-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-sync {
+  font-size: 10px;
+  color: var(--color-accent-green);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 500;
+}
+
+.sidebar-menu {
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-section {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 12px 10px 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  border-radius: 6px;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.sidebar-item i {
+  font-size: 15px;
+  color: var(--color-text-tertiary);
+}
+
+.sidebar-item:hover {
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.sidebar-item:hover i {
+  color: var(--color-text-secondary);
+}
+
+.sidebar-item.active {
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.sidebar-item.active i {
+  color: var(--color-text-primary);
+}
+
+.sb-add-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+}
+
+.sb-add-btn:hover {
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+/* Pages Sublist inside Sidebar Drawer */
+.sidebar-pages-sublist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 18px;
+  margin: 2px 0 6px;
+  border-left: 0.5px solid var(--color-border-tertiary);
+}
+
+.sidebar-page-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.sidebar-page-item i {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.sidebar-page-item:hover {
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.sidebar-page-item.active {
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+/* Rich-Text Note Editor Styles */
+.editor-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  margin-bottom: 16px;
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+
+.editor-btn {
+  background: none;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.editor-btn:hover {
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.editor-title-input {
+  width: 100%;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-family: var(--font-serif);
+  border: none;
+  background: transparent;
+  margin-bottom: 16px;
+  padding: 0;
+  outline: none;
+}
+
+.editor-content-area {
+  min-height: 350px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  border: none;
+  outline: none;
+  padding: 4px 0;
+  overflow-y: auto;
+}
+
+.editor-content-area:empty:before {
+  content: "Start writing or paste images here...";
+  color: var(--color-text-tertiary);
+  pointer-events: none;
+  display: block;
+}
+
+.editor-content-area img {
+  max-width: 100%;
+  border-radius: var(--border-radius-md);
+  margin: 12px 0;
+  display: block;
+  box-shadow: 0 2px 8px var(--color-shadow);
+}
+
+/* Notes Manager Page elements */
+.notes-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 14px;
+}
+
+.notes-tr {
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+  transition: background-color 0.15s;
+  cursor: pointer;
+}
+
+.notes-tr:hover {
+  background-color: var(--color-background-secondary);
+}
+
+.notes-td {
+  padding: 12px 6px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  vertical-align: middle;
+}
+
+.notes-td-title {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-td-title i {
+  color: var(--color-text-tertiary);
+  font-size: 14px;
+}
+
+.notes-td-date {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.notes-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s, background-color 0.15s;
+  font-size: 12px;
+}
+
+.notes-delete-btn:hover {
+  color: var(--color-accent-red);
+  background-color: rgba(224, 97, 67, 0.15);
+}

@@ -105,6 +105,8 @@ let S = {
   ch: [],
   deleted_defaults: [], // Track deleted default habits
   tasks: [],
+  pages: [],            // Note pages inside "The Void"
+  activePageId: null,   // Active note page ID
   as: null,
   wd: null,
   db: null,
@@ -213,6 +215,7 @@ async function loadAll() {
   S.cs = await ld('cs', []);
   S.cf = await ld('cf', []);
   S.ch = await ld('ch', []);
+  S.pages = await ld('kwig_pages', []);
   S.deleted_defaults = await ld('deleted_defaults', []);
   S.notifiers = await ld('notifiers', {
     water: { enabled: false, interval: 1 },
@@ -223,6 +226,9 @@ async function loadAll() {
   if ('Notification' in window && Notification.permission === 'granted') {
     setupWebTimers();
   }
+  
+  // Render initial pages links inside sidebar drawer
+  renderSidebarPages();
 }
 
 const si = () => [...SB, ...S.cs].filter(i => !S.deleted_defaults.includes(i.id));
@@ -295,7 +301,6 @@ async function loadDb() {
     const totals = getHabitTotals(p, h);
     const tDn = ta.filter(t => t.done).length;
     
-    // Check custom habits loaded for that specific day
     const customS = await ld('cs', []), customF = await ld('cf', []), customH = await ld('ch', []);
     const totalCount = SB.length + customS.length + FB.length + customF.length + HB.length + customH.length + ta.length;
     
@@ -686,13 +691,88 @@ function renderDb() {
   </div>`;
 }
 
+// "The Void" - Notes Manager Page
+function renderNotes() {
+  const rows = S.pages.map(p => `
+    <tr class="notes-tr" onclick="window.openPage('${p.id}')">
+      <td class="notes-td notes-td-title">
+        <i class="ti ti-file-text" aria-hidden="true"></i>
+        <span>${p.name || 'Untitled'}</span>
+      </td>
+      <td class="notes-td notes-td-date">${p.date}</td>
+      <td class="notes-td" style="text-align: right; width: 60px;" onclick="event.stopPropagation();">
+        <button class="notes-delete-btn" onclick="window.confirmDeletePage('${p.id}', '${p.name.replace(/'/g, "\\'")}')" aria-label="Delete note">
+          <i class="ti ti-trash" aria-hidden="true"></i>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+  
+  const empty = S.pages.length === 0 ? `
+    <div style="padding:48px 0; text-align:center; color:var(--color-text-tertiary);">
+      <i class="ti ti-notebook" style="font-size: 32px; margin-bottom: 12px; display:block;" aria-hidden="true"></i>
+      <div style="font-size: 14px; font-weight: 500;">No notes found</div>
+      <div style="font-size: 11px; margin-top: 4px;">Click the button below to add your first page</div>
+    </div>
+  ` : `<table class="notes-table"><tbody>${rows}</tbody></table>`;
+  
+  return `<div class="pg" style="padding:20px 0 20px">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 24px;">
+      <div>
+        <div style="font-size:24px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif)">The Void</div>
+        <div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px;">Your personal thought canvas</div>
+      </div>
+      <button class="add-btn" onclick="window.createNewPage()">+ New Page</button>
+    </div>
+    
+    <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding: 8px 12px; box-shadow: 0 2px 8px var(--color-shadow)">
+      ${empty}
+    </div>
+  </div>`;
+}
+
+// "The Void" - Notes Editor Page
+function renderEditor() {
+  const page = S.pages.find(p => p.id === S.activePageId);
+  if (!page) return `<div class="pg">Page not found</div>`;
+  
+  return `<div class="pg" style="padding:20px 0 20px">
+    <div class="editor-actions">
+      <button class="back-btn" onclick="window.goTo('notes')">
+        <i class="ti ti-arrow-left" aria-hidden="true"></i> The Void
+      </button>
+      <div style="display:flex; gap: 8px;">
+        <button class="editor-btn" onclick="window.triggerImageImport()">
+          <i class="ti ti-photo-plus" aria-hidden="true"></i> Import
+        </button>
+        <button class="editor-btn" onclick="window.triggerPasteClipboard()">
+          <i class="ti ti-clipboard" aria-hidden="true"></i> Paste
+        </button>
+      </div>
+    </div>
+    
+    <input type="text" class="editor-title-input" id="editor-title" value="${page.name || ''}" placeholder="Untitled" oninput="window.updatePageTitle(this.value)">
+    
+    <div class="editor-content-area" id="editor-content" contenteditable="true" onblur="window.saveEditorContent()" oninput="window.saveEditorContent()">${page.content || ''}</div>
+  </div>`;
+}
+
 function render() {
   const app = document.getElementById('app');
   if (!app) return;
+  
+  // Highlight active sidebar links
+  document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+  if (S.page === 'home') document.getElementById('sb-home')?.classList.add('active');
+  else if (S.page === 'database') document.getElementById('sb-db')?.classList.add('active');
+  else if (S.page === 'notes' || S.page === 'editor') document.getElementById('sb-void-mgr')?.classList.add('active');
+  
   if (S.page === 'home') app.innerHTML = renderHome();
   else if (S.page === 'productivity') app.innerHTML = renderProd();
   else if (S.page === 'health') app.innerHTML = renderHealth();
-  else app.innerHTML = renderDb();
+  else if (S.page === 'database') app.innerHTML = renderDb();
+  else if (S.page === 'notes') app.innerHTML = renderNotes();
+  else if (S.page === 'editor') app.innerHTML = renderEditor();
 }
 
 window.goTo = p => {
@@ -805,7 +885,6 @@ window.confT = () => {
   render();
 };
 
-// Fixed persistence storage keys for deletion (original had custom-study, loadAll had cs)
 window.delC = (sec, id) => {
   if (sec === 'study') S.cs = S.cs.filter(i => i.id !== id);
   else if (sec === 'fun') S.cf = S.cf.filter(i => i.id !== id);
@@ -860,14 +939,228 @@ window.changeNotifierInterval = (type, val) => {
   updateNotificationScheduling();
 };
 
-// 8. Long Press (Hold-to-Delete) Gesture Logic
+// 8. Sidebar & Drive Alert functions
+window.openSidebar = () => {
+  document.getElementById('sidebar').classList.add('active');
+  document.getElementById('sidebar-overlay').classList.add('active');
+  document.getElementById('menu-btn').querySelector('i').style.transform = 'rotate(90deg)';
+  renderSidebarPages();
+};
+
+window.closeSidebar = () => {
+  document.getElementById('sidebar').classList.remove('active');
+  document.getElementById('sidebar-overlay').classList.remove('active');
+  document.getElementById('menu-btn').querySelector('i').style.transform = 'rotate(0deg)';
+};
+
+function renderSidebarPages() {
+  const listEl = document.getElementById('sidebar-pages-list');
+  if (!listEl) return;
+  
+  listEl.innerHTML = S.pages.map(p => {
+    const isActive = S.page === 'editor' && S.activePageId === p.id;
+    return `<a href="#" class="sidebar-page-item ${isActive ? 'active' : ''}" onclick="event.preventDefault(); window.openPage('${p.id}'); window.closeSidebar();">
+      <i class="ti ti-file-text" aria-hidden="true"></i><span>${p.name || 'Untitled'}</span>
+    </a>`;
+  }).join('');
+}
+
+window.showSyncAlert = () => {
+  alert("Cloud Sync Integration:\nThis will connect to your Google Drive account, allowing Kwig databases to auto-sync and backup files privately under your custom Drive storage folder.");
+};
+
+// 9. Notes Page Manager State functions
+window.createNewPage = () => {
+  const newId = uid();
+  const formatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+  const dateString = new Date().toLocaleDateString('en-US', formatOptions);
+  
+  const newPage = {
+    id: newId,
+    name: "Untitled",
+    date: dateString,
+    content: ""
+  };
+  
+  S.pages.unshift(newPage);
+  sv('kwig_pages', S.pages);
+  
+  window.openPage(newId);
+  window.closeSidebar();
+};
+
+window.openPage = id => {
+  S.page = 'editor';
+  S.activePageId = id;
+  render();
+  
+  const contentArea = document.getElementById('editor-content');
+  if (contentArea) {
+    contentArea.addEventListener('keyup', cacheSelection);
+    contentArea.addEventListener('mouseup', cacheSelection);
+    contentArea.addEventListener('touchend', cacheSelection);
+    contentArea.focus();
+  }
+};
+
+window.updatePageTitle = title => {
+  const page = S.pages.find(p => p.id === S.activePageId);
+  if (page) {
+    page.name = title.trim() || "Untitled";
+    sv('kwig_pages', S.pages);
+    renderSidebarPages();
+  }
+};
+
+window.saveEditorContent = () => {
+  const page = S.pages.find(p => p.id === S.activePageId);
+  const contentArea = document.getElementById('editor-content');
+  if (page && contentArea) {
+    page.content = contentArea.innerHTML;
+    sv('kwig_pages', S.pages);
+  }
+};
+
+window.confirmDeletePage = (id, name) => {
+  showDeleteModal('page', id, null, name);
+};
+
+// 10. Selection & Caret Position Caching
+let lastSelectionRange = null;
+
+function cacheSelection() {
+  const sel = window.getSelection();
+  if (sel.rangeCount > 0) {
+    lastSelectionRange = sel.getRangeAt(0).cloneRange();
+  }
+}
+
+function restoreSelection() {
+  const contentArea = document.getElementById('editor-content');
+  if (!contentArea) return;
+  
+  contentArea.focus();
+  const sel = window.getSelection();
+  
+  if (lastSelectionRange) {
+    sel.removeAllRanges();
+    sel.addRange(lastSelectionRange);
+  } else {
+    const range = document.createRange();
+    range.selectNodeContents(contentArea);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    lastSelectionRange = range.cloneRange();
+  }
+}
+
+function insertHtmlAtCursor(html) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  
+  const frag = document.createDocumentFragment();
+  let node, lastNode;
+  while ((node = tempDiv.firstChild)) {
+    lastNode = frag.appendChild(node);
+  }
+  
+  range.insertNode(frag);
+  
+  if (lastNode) {
+    range.setStartAfter(lastNode);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    lastSelectionRange = range.cloneRange();
+  }
+}
+
+function insertTextAtCursor(text) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  
+  const textNode = document.createTextNode(text);
+  range.insertNode(textNode);
+  
+  range.setStartAfter(textNode);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  lastSelectionRange = range.cloneRange();
+}
+
+// 11. Editor Media Actions (Import & Paste)
+window.triggerImageImport = () => {
+  document.getElementById('import-image-file').click();
+};
+
+document.getElementById('import-image-file').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = event => {
+    const base64 = event.target.result;
+    restoreSelection();
+    const imgHtml = `<img src="${base64}" alt="Imported Image">`;
+    insertHtmlAtCursor(imgHtml);
+    e.target.value = ''; // Clear file input
+    window.saveEditorContent();
+  };
+  reader.readAsDataURL(file);
+});
+
+window.triggerPasteClipboard = async () => {
+  try {
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const imageTypes = item.types.filter(t => t.startsWith('image/'));
+      if (imageTypes.length > 0) {
+        const blob = await item.getType(imageTypes[0]);
+        const reader = new FileReader();
+        reader.onload = event => {
+          const base64 = event.target.result;
+          restoreSelection();
+          const imgHtml = `<img src="${base64}" alt="Pasted Image">`;
+          insertHtmlAtCursor(imgHtml);
+          window.saveEditorContent();
+        };
+        reader.readAsDataURL(blob);
+        return;
+      }
+    }
+    
+    // Fallback to text
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      restoreSelection();
+      insertTextAtCursor(text);
+      window.saveEditorContent();
+    }
+  } catch (err) {
+    console.warn("Advanced clipboard API failed, checking simple paste:", err);
+    alert("Clipboard reading permission is required.\nTip: You can also use standard Ctrl+V (or keyboard paste) directly inside the notes editor canvas!");
+  }
+};
+
+// 12. Long Press (Hold-to-Delete) Gesture Logic
 let holdTimer = null;
 let holdTarget = null;
 let holdTriggered = false;
 let pendingDelete = null;
 let startX = 0, startY = 0;
 
-function handleStart(e, targetRow) {
+function handlePointerStart(e, targetRow) {
   holdTarget = targetRow;
   holdTriggered = false;
   
@@ -890,7 +1183,7 @@ function handleStart(e, targetRow) {
   }, 600);
 }
 
-function handleEnd() {
+function handlePointerEnd() {
   if (holdTimer) {
     clearTimeout(holdTimer);
     holdTimer = null;
@@ -935,7 +1228,7 @@ document.addEventListener('touchstart', e => {
   const touch = e.touches[0];
   startX = touch.clientX;
   startY = touch.clientY;
-  handleStart(e, row);
+  handlePointerStart(e, row);
 }, { passive: true });
 
 document.addEventListener('touchmove', e => {
@@ -944,18 +1237,18 @@ document.addEventListener('touchmove', e => {
   const diffX = Math.abs(touch.clientX - startX);
   const diffY = Math.abs(touch.clientY - startY);
   if (diffX > 10 || diffY > 10) {
-    handleEnd();
+    handlePointerEnd();
   }
 }, { passive: true });
 
-document.addEventListener('touchend', handleEnd, { passive: true });
+document.addEventListener('touchend', handlePointerEnd, { passive: true });
 
 document.addEventListener('mousedown', e => {
   const row = e.target.closest('.cr');
   if (!row || e.button !== 0) return;
   startX = e.clientX;
   startY = e.clientY;
-  handleStart(e, row);
+  handlePointerStart(e, row);
 });
 
 document.addEventListener('mousemove', e => {
@@ -963,11 +1256,11 @@ document.addEventListener('mousemove', e => {
   const diffX = Math.abs(e.clientX - startX);
   const diffY = Math.abs(e.clientY - startY);
   if (diffX > 10 || diffY > 10) {
-    handleEnd();
+    handlePointerEnd();
   }
 });
 
-document.addEventListener('mouseup', handleEnd);
+document.addEventListener('mouseup', handlePointerEnd);
 
 // Setup Modal Cancel/Confirm buttons
 document.getElementById('modal-cancel-btn').addEventListener('click', () => {
@@ -981,14 +1274,19 @@ document.getElementById('modal-confirm-btn').addEventListener('click', () => {
     if (type === 'task') {
       S.tasks = S.tasks.filter(t => t.id !== id);
       sv(`tasks-${TK}`, S.tasks);
+    } else if (type === 'page') {
+      S.pages = S.pages.filter(p => p.id !== id);
+      sv('kwig_pages', S.pages);
+      if (S.page === 'editor' && S.activePageId === id) {
+        S.page = 'notes';
+        S.activePageId = null;
+      }
     } else if (type === 'habit') {
-      // Check if it's default habit
       const isDefault = SB.some(x => x.id === id) || FB.some(x => x.id === id) || HB.some(x => x.id === id);
       if (isDefault) {
         S.deleted_defaults.push(id);
         sv('deleted_defaults', S.deleted_defaults);
       } else {
-        // Custom habit
         if (sec === 'study') S.cs = S.cs.filter(i => i.id !== id);
         else if (sec === 'fun') S.cf = S.cf.filter(i => i.id !== id);
         else S.ch = S.ch.filter(i => i.id !== id);
@@ -1003,6 +1301,34 @@ document.getElementById('modal-confirm-btn').addEventListener('click', () => {
     render();
   }
   closeDeleteModal();
+});
+
+// Setup click listener on the backdrop overlay to close sidebar
+document.getElementById('sidebar-overlay').addEventListener('click', window.closeSidebar);
+
+// Hook up Ctrl+V paste event directly in the contenteditable area for desktop convenience
+document.addEventListener('paste', e => {
+  const contentArea = document.getElementById('editor-content');
+  if (document.activeElement !== contentArea) return;
+  
+  const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+  for (const item of items) {
+    if (item.type.indexOf('image') === 0) {
+      e.preventDefault(); // Prevent duplicate paste
+      const blob = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = event => {
+        const base64 = event.target.result;
+        restoreSelection();
+        const imgHtml = `<img src="${base64}" alt="Pasted Image">`;
+        insertHtmlAtCursor(imgHtml);
+        window.saveEditorContent();
+      };
+      reader.readAsDataURL(blob);
+      return;
+    }
+  }
+  // Standard text pasting runs default browser behavior and updates local state oninput
 });
 
 // Initial run

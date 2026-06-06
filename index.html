@@ -8,7 +8,7 @@
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;1,400&family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
   
   <!-- Tabler Icons -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
@@ -21,11 +21,51 @@
   <!-- Mockup frame container for premium display (goes full screen on mobile screens) -->
   <div id="app-container">
     
+    <!-- Blurry Sidebar Overlay -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+    <!-- Navigation Sidebar Drawer -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-avatar">K</div>
+        <div class="sidebar-profile">
+          <div class="profile-name">Kwig Cloud Account</div>
+          <div class="profile-sync"><i class="ti ti-cloud-check"></i> Google Drive Synced</div>
+        </div>
+      </div>
+
+      <div class="sidebar-menu">
+        <div class="sidebar-section">Workspace</div>
+        <a href="#" class="sidebar-item active" id="sb-home" onclick="event.preventDefault(); window.goTo('home'); window.closeSidebar();">
+          <i class="ti ti-smart-home" aria-hidden="true"></i> Dashboard
+        </a>
+        <a href="#" class="sidebar-item" id="sb-db" onclick="event.preventDefault(); window.goTo('database'); window.closeSidebar();">
+          <i class="ti ti-database" aria-hidden="true"></i> Database Logs
+        </a>
+
+        <div class="sidebar-section">
+          <span>The Void</span>
+          <button class="sb-add-btn" onclick="event.stopPropagation(); window.createNewPage();" title="Add new note">+</button>
+        </div>
+        <a href="#" class="sidebar-item" id="sb-void-mgr" onclick="event.preventDefault(); window.goTo('notes'); window.closeSidebar();">
+          <i class="ti ti-folder-open" aria-hidden="true"></i> Note Pages
+        </a>
+        
+        <!-- Sub-list of pages (rendered dynamically by JS) -->
+        <div id="sidebar-pages-list" class="sidebar-pages-sublist"></div>
+
+        <div class="sidebar-section">Account</div>
+        <a href="#" class="sidebar-item" id="sb-sync" onclick="event.preventDefault(); window.showSyncAlert();">
+          <i class="ti ti-cloud-upload" aria-hidden="true"></i> Drive Auto-Sync
+        </a>
+      </div>
+    </aside>
+    
     <!-- Permanent Mobile Native Header with Theme Toggle -->
     <header class="app-header">
-      <div class="logo-text">
-        <i class="ti ti-notebook" aria-hidden="true"></i>
-        <span>Kwig</span>
+      <div class="logo-text" id="menu-btn" style="cursor:pointer" onclick="window.openSidebar()">
+        <i class="ti ti-menu-2" aria-hidden="true" style="font-size: 18px; transition: transform 0.2s;"></i>
+        <span style="font-family: 'Cinzel', serif; font-weight: 600; letter-spacing: 0.05em; font-size: 15px;">Kwig</span>
       </div>
       <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
         <i class="ti ti-moon" id="theme-icon" aria-hidden="true"></i>
@@ -50,6 +90,9 @@
     </div>
 
   </div>
+
+  <!-- Hidden Image Import File Input Helper -->
+  <input type="file" id="import-image-file" accept="image/*" style="display:none">
 
   <!-- App logic -->
   <script type="module" src="/src/main.js"></script>
