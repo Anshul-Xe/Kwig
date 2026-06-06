@@ -1043,19 +1043,7 @@ async function findBackupFileId() {
 }
 
 window.startGoogleDriveLogin = () => {
-  const useCustom = confirm("Would you like to enter a custom Google Client ID?\n(Click Cancel to use Kwig's default Google client ID for standard testing)");
-  let clientId = S.gdriveClientId;
-  if (useCustom) {
-    const input = prompt("Enter your Google Client ID:", S.gdriveClientId);
-    if (input && input.trim()) {
-      clientId = input.trim();
-      S.gdriveClientId = clientId;
-      sv('gdrive_client_id', clientId);
-    } else {
-      return;
-    }
-  }
-  
+  const clientId = S.gdriveClientId;
   const redirectUri = 'https://localhost';
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent('https://www.googleapis.com/auth/drive.file')}&prompt=select_account`;
   
@@ -1232,6 +1220,9 @@ window.createNewPage = () => {
 };
 
 window.openPage = id => {
+  if (S.page !== 'editor') {
+    S.history.push(S.page);
+  }
   S.page = 'editor';
   S.activePageId = id;
   render();
@@ -1778,8 +1769,8 @@ document.addEventListener('touchend', e => {
   const diffX = swipeStartX - e.changedTouches[0].clientX;
   const diffY = Math.abs(swipeStartY - e.changedTouches[0].clientY);
   
-  // Right-to-left swipe (swiping leftwards) triggers goBack
-  if (diffX > 80 && diffY < 60) {
+  // Dual-direction swipe back: support left-to-right (standard back) and right-to-left
+  if (Math.abs(diffX) > 60 && diffY < 50) {
     window.goBack();
   }
   
