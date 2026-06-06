@@ -117,6 +117,9 @@ let S = {
   gdriveToken: null,    // Google Drive access token
   gdriveClientId: '910899479357-oeqhpsg705kspesph1m6q10411r1h25o.apps.googleusercontent.com', // Default OAuth Client ID
   weeklyHabitStates: {}, // Habit states for the last 7 days
+  dbFilter: 'monthly',
+  prodFormula: 'linear_algebra(2) + statistics(2) + python(2) + project(2) + book_reading(2) + fl_studio(2) + speaking(2)',
+  healthFormula: 'water_meter(2) + conscious_meter(2) + water(2) + gym(2) + running(2) + food(2) + meditation(2)',
   notifiers: {
     water: { enabled: false, interval: 1 },
     walk: { enabled: false, interval: 1 }
@@ -242,6 +245,10 @@ async function loadAll() {
     };
   }
   
+  S.dbFilter = await ld('db_filter', 'monthly');
+  S.prodFormula = await ld('prod_formula', 'linear_algebra(2) + statistics(2) + python(2) + project(2) + book_reading(2) + fl_studio(2) + speaking(2)');
+  S.healthFormula = await ld('health_formula', 'water_meter(2) + conscious_meter(2) + water(2) + gym(2) + running(2) + food(2) + meditation(2)');
+  
   // Parse Google OAuth redirect hash if present
   if (window.location.hash.includes('access_token=')) {
     const params = new URLSearchParams(window.location.hash.substring(1));
@@ -281,14 +288,76 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const gdk = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 const sd = d => `${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
 
+const cleanNameForFormula = label => label.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+
+function parseFormulaWeights(formulaStr) {
+  const weights = {};
+  if (!formulaStr) return weights;
+  const regex = /(\b[a-zA-Z0-9_-]+)\s*\(\s*([0-9.]+)\s*\)/g;
+  let match;
+  while ((match = regex.exec(formulaStr)) !== null) {
+    const name = match[1].toLowerCase();
+    const weight = parseFloat(match[2]);
+    weights[name] = weight;
+  }
+  return weights;
+}
+
 const getHabitTotals = (pcState, hcState) => {
-  const activeS = SB.filter(x => !S.deleted_defaults.includes(x.id));
-  const activeF = FB.filter(x => !S.deleted_defaults.includes(x.id));
-  const activeH = HB.filter(x => !S.deleted_defaults.includes(x.id));
+  const prodWeights = parseFormulaWeights(S.prodFormula);
+  const healthWeights = parseFormulaWeights(S.healthFormula);
+
+  const activeS = si();
+  let studyEarned = 0;
+  let studyTotal = 0;
+  for (const h of activeS) {
+    const name = cleanNameForFormula(h.label);
+    const weight = prodWeights[name] !== undefined ? prodWeights[name] : 2;
+    studyTotal += weight;
+    if (pcState[h.id]) {
+      studyEarned += weight;
+    }
+  }
+
+  const activeF = fi();
+  let funEarned = 0;
+  let funTotal = 0;
+  for (const h of activeF) {
+    const name = cleanNameForFormula(h.label);
+    const weight = prodWeights[name] !== undefined ? prodWeights[name] : 2;
+    funTotal += weight;
+    if (pcState[h.id]) {
+      funEarned += weight;
+    }
+  }
+
+  const activeH = hi();
+  let healthEarned = 0;
+  let healthTotal = 0;
+  for (const h of activeH) {
+    const name = cleanNameForFormula(h.label);
+    const weight = healthWeights[name] !== undefined ? healthWeights[name] : 2;
+    healthTotal += weight;
+    if (hcState[h.id]) {
+      healthEarned += weight;
+    }
+  }
+
+  const waterLvl = hcState.water_level !== undefined ? hcState.water_level : 1.0;
+  const waterMeterWeight = healthWeights['water_meter'] !== undefined ? healthWeights['water_meter'] : 2;
+  healthTotal += waterMeterWeight;
+  healthEarned += waterMeterWeight * (waterLvl / 4.0);
+
+  const consciousLvl = hcState.conscious_level !== undefined ? hcState.conscious_level : 4;
+  const consciousMeterWeight = healthWeights['conscious_meter'] !== undefined ? healthWeights['conscious_meter'] : 2;
+  healthTotal += consciousMeterWeight;
+  healthEarned += consciousMeterWeight * (consciousLvl / 6.0);
+
   return {
-    study: activeS.length ? Math.round(activeS.filter(x => pcState[x.id]).length / activeS.length * 100) : 0,
-    fun: activeF.length ? Math.round(activeF.filter(x => pcState[x.id]).length / activeF.length * 100) : 0,
-    health: activeH.length ? Math.round(activeH.filter(x => hcState[x.id]).length / activeH.length * 100) : 0
+    study: studyTotal ? Math.round((studyEarned / studyTotal) * 100) : 0,
+    fun: funTotal ? Math.round((funEarned / funTotal) * 100) : 0,
+    prod: (studyTotal + funTotal) ? Math.round(((studyEarned + funEarned) / (studyTotal + funTotal)) * 100) : 0,
+    health: healthTotal ? Math.round((healthEarned / healthTotal) * 100) : 0
   };
 };
 
@@ -334,31 +403,85 @@ async function loadWd() {
 
 async function loadDb() {
   const rows = [];
-  for (let i = 0; i < 30; i++) {
+  let limit = 30;
+  const activeDateKeys = new Set();
+  let hasLocalStorage = false;
+  
+  try {
+    const datePattern = /^(prod|health|tasks)-(\d{4}-\d{1,2}-\d{1,2})$/;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      const match = key.match(datePattern);
+      if (match) {
+        activeDateKeys.add(match[2]);
+      }
+    }
+    hasLocalStorage = localStorage.length > 0;
+  } catch (e) {
+    console.warn("localStorage check failed:", e);
+  }
+
+  if (S.dbFilter === 'weekly') {
+    limit = 7;
+  } else if (S.dbFilter === 'monthly') {
+    limit = 30;
+  } else {
+    // find the oldest date in localStorage
+    let oldestDays = 365; // fallback
+    try {
+      let earliestTime = Date.now();
+      let found = false;
+      for (const dk of activeDateKeys) {
+        const parts = dk.split('-');
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        if (!isNaN(d.getTime())) {
+          if (d.getTime() < earliestTime) {
+            earliestTime = d.getTime();
+            found = true;
+          }
+        }
+      }
+      if (found) {
+        const diffTime = Math.abs(_t.getTime() - earliestTime);
+        oldestDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        if (oldestDays < 365) oldestDays = 365; // show at least 365 days or all data
+      }
+    } catch (e) {
+      console.warn("Error calculating oldest day limit:", e);
+    }
+    limit = oldestDays;
+  }
+  
+  for (let i = 0; i < limit; i++) {
     const d = new Date(_t);
     d.setDate(d.getDate() - i);
     const dk = gdk(d);
-    const p = await ld(`prod-${dk}`, {}), h = await ld(`health-${dk}`, {}), ta = await ld(`tasks-${dk}`, []);
-    const totals = getHabitTotals(p, h);
-    const tDn = ta.filter(t => t.done).length;
     
-    const customS = await ld('cs', []), customF = await ld('cf', []), customH = await ld('ch', []);
-    const totalCount = SB.length + customS.length + FB.length + customF.length + HB.length + customH.length + ta.length;
-    
-    if (totalCount > 0 || i === 0) {
-      rows.push({
-        fd: `${DAYS[d.getDay()].slice(0, 3)}, ${sd(d)}`,
-        isToday: i === 0,
-        study: totals.study,
-        fun: totals.fun,
-        health: totals.health,
-        tDone: tDn,
-        tTotal: ta.length
-      });
+    // Only load from storage if it is today, or if we don't have localStorage, or if the date actually has keys
+    if (i === 0 || !hasLocalStorage || activeDateKeys.has(dk)) {
+      const p = await ld(`prod-${dk}`, {}), h = await ld(`health-${dk}`, {}), ta = await ld(`tasks-${dk}`, []);
+      const totals = getHabitTotals(p, h);
+      const tDn = ta.filter(t => t.done).length;
+      
+      const customS = await ld('cs', []), customF = await ld('cf', []), customH = await ld('ch', []);
+      const totalCount = SB.length + customS.length + FB.length + customF.length + HB.length + customH.length + ta.length;
+      
+      if (totalCount > 0 || i === 0) {
+        rows.push({
+          fd: `${DAYS[d.getDay()].slice(0, 3)}, ${sd(d)}`,
+          isToday: i === 0,
+          study: totals.study,
+          fun: totals.fun,
+          health: totals.health,
+          tDone: tDn,
+          tTotal: ta.length
+        });
+      }
     }
   }
   S.db = rows;
 }
+
 
 function ring(done, tot, sz, sw, col) {
   const r = (sz - sw) / 2, c = 2 * Math.PI * r, pct = tot ? done / tot : 0, off = c * (1 - pct);
@@ -422,6 +545,7 @@ function aiform(sec) {
 function renderHome() {
   const prod = ai(), hlth = hi();
   const pD = prod.filter(i => S.pc[i.id]).length, hD = hlth.filter(i => S.hc[i.id]).length;
+  const totals = getHabitTotals(S.pc, S.hc);
 
   // Compute weekly habit matrix html
   const mHabits = (() => {
@@ -473,7 +597,7 @@ function renderHome() {
     
     return `<tr style="border-bottom:0.5px solid var(--color-border-tertiary)">
       <td style="padding:6px 4px;text-align:center;vertical-align:middle">
-        <div style="font-size:14px;color:${color};display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary)" title="${h.label}">
+        <div style="font-size:20px;color:${color};display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary)" title="${h.label}">
           <i class="${h.icon}"></i>
         </div>
       </td>
@@ -626,18 +750,23 @@ function renderHome() {
     </div>
     
     <div class="f3">
-      <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:10px">Today's progress</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <span style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase">Today's progress</span>
+        <button onclick="goTo('database')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--color-text-secondary);font-family:var(--font-sans);padding:0;display:inline-flex;align-items:center;gap:3px">
+          View all <i class="ti ti-arrow-up-right" style="font-size:12px" aria-hidden="true"></i>
+        </button>
+      </div>
       <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);display:flex;margin-bottom:24px;box-shadow: 0 2px 8px var(--color-shadow)">
         <div class="tap" onclick="goTo('productivity')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 8px;border-radius:var(--border-radius-lg) 0 0 var(--border-radius-lg)">
-          ${ring(pD, prod.length, 86, 6, 'var(--color-text-primary)')}
+          ${ring(totals.prod, 100, 86, 6, 'var(--color-text-primary)')}
           <div style="font-size:10px;font-weight:600;color:var(--color-text-secondary);letter-spacing:0.07em;text-transform:uppercase">Productivity</div>
-          <div style="font-size:11px;color:var(--color-text-tertiary)">${pD} of ${prod.length}</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary)">Score: ${totals.prod}%</div>
         </div>
         <div style="width:0.5px;background:var(--color-border-tertiary);margin:12px 0"></div>
         <div class="tap" onclick="goTo('health')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 8px;border-radius:0 var(--border-radius-lg) var(--border-radius-lg) 0">
-          ${ring(hD, hlth.length, 86, 6, 'var(--color-text-secondary)')}
+          ${ring(totals.health, 100, 86, 6, 'var(--color-text-secondary)')}
           <div style="font-size:10px;font-weight:600;color:var(--color-text-secondary);letter-spacing:0.07em;text-transform:uppercase">Health</div>
-          <div style="font-size:11px;color:var(--color-text-tertiary)">${hD} of ${hlth.length}</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary)">Score: ${totals.health}%</div>
         </div>
       </div>
     </div>
@@ -661,17 +790,6 @@ function renderHome() {
     <!-- Reminders / Notifiers -->
     ${notifierHtml}
     
-    <div class="f5">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <span style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase">Weekly progress</span>
-        <button onclick="goTo('database')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--color-text-secondary);font-family:var(--font-sans);padding:0;display:inline-flex;align-items:center;gap:3px">
-          View all <i class="ti ti-arrow-up-right" style="font-size:12px" aria-hidden="true"></i>
-        </button>
-      </div>
-      <div onclick="goTo('database')" class="tap" style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;box-shadow: 0 2px 8px var(--color-shadow)">
-        ${wk}
-      </div>
-    </div>
   </div>`;
 }
 
@@ -679,6 +797,22 @@ function renderProd() {
   const sIds = new Set(SB.map(x => x.id)), fIds = new Set(FB.map(x => x.id));
   const sR = si().map(i => irow(i, !!S.pc[i.id], 'prod', !sIds.has(i.id), 'study')).join('');
   const fR = fi().map(i => irow(i, !!S.pc[i.id], 'prod', !fIds.has(i.id), 'fun')).join('');
+  
+  const consoleHtml = `
+    <div style="margin-top:28px;border-top:0.5px solid var(--color-border-tertiary);padding-top:20px">
+      <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px">Weights Console</div>
+      <div style="background:#121212;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:10px 12px;font-family:'Courier New',Courier,monospace;box-shadow:inset 0 1px 4px rgba(0,0,0,0.6)">
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#00ff00;margin-bottom:6px">
+          <span>$ kwig --configure-weights</span>
+        </div>
+        <textarea onchange="window.saveConsoleWeights('prod', this.value)" 
+                  style="width:100%;height:48px;background:transparent;border:none;outline:none;color:#ffffff;font-family:'Courier New',Courier,monospace;font-size:11px;line-height:1.4;resize:none;box-sizing:border-box;padding:0;margin:0"
+                  placeholder="e.g. math(3) + python(2)">${S.prodFormula}</textarea>
+        <div style="font-size:9px;color:#888888;text-align:right;margin-top:4px">Edit weights & focus out to save</div>
+      </div>
+    </div>
+  `;
+
   return `<div class="pg" style="padding:20px 0 20px">
     <button class="back-btn" onclick="goTo('home')">
       <i class="ti ti-arrow-left" style="font-size:15px" aria-hidden="true"></i>Back
@@ -695,6 +829,7 @@ function renderProd() {
     <div style="border-top:0.5px solid var(--color-border-tertiary)">
       ${fR}${S.as === 'fun' ? aiform('fun') : ''}
     </div>
+    ${consoleHtml}
   </div>`;
 }
 
@@ -740,6 +875,21 @@ function renderHealth() {
     </div>
   </div>`;
 
+  const consoleHtml = `
+    <div style="margin-top:28px;border-top:0.5px solid var(--color-border-tertiary);padding-top:20px">
+      <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px">Weights Console</div>
+      <div style="background:#121212;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:10px 12px;font-family:'Courier New',Courier,monospace;box-shadow:inset 0 1px 4px rgba(0,0,0,0.6)">
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#00ff00;margin-bottom:6px">
+          <span>$ kwig --configure-weights</span>
+        </div>
+        <textarea onchange="window.saveConsoleWeights('health', this.value)" 
+                  style="width:100%;height:48px;background:transparent;border:none;outline:none;color:#ffffff;font-family:'Courier New',Courier,monospace;font-size:11px;line-height:1.4;resize:none;box-sizing:border-box;padding:0;margin:0"
+                  placeholder="e.g. water(3) + gym(2)">${S.healthFormula}</textarea>
+        <div style="font-size:9px;color:#888888;text-align:right;margin-top:4px">Edit weights & focus out to save</div>
+      </div>
+    </div>
+  `;
+
   return `<div class="pg" style="padding:20px 0 20px">
     <button class="back-btn" onclick="goTo('home')">
       <i class="ti ti-arrow-left" style="font-size:15px" aria-hidden="true"></i>Back
@@ -757,6 +907,7 @@ function renderHealth() {
     
     <!-- Consciousness Scale -->
     ${consciousSliderHtml}
+    ${consoleHtml}
   </div>`;
 }
 
@@ -779,12 +930,21 @@ function renderDb() {
     <td style="padding:11px 12px 11px 4px;text-align:center;font-size:11px;color:var(--color-text-secondary)">${d.tTotal > 0 ? d.tDone + '/' + d.tTotal : '—'}</td>
   </tr>`).join('');
 
+  const filterDesc = S.dbFilter === 'weekly' ? 'last 7 days' : S.dbFilter === 'monthly' ? 'last 30 days' : 'all time';
+
   return `<div class="pg" style="padding:20px 0 20px">
     <button class="back-btn" onclick="goTo('home')">
       <i class="ti ti-arrow-left" style="font-size:15px" aria-hidden="true"></i>Back
     </button>
-    <div style="font-size:24px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif);margin:18px 0 4px">Database</div>
-    <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:24px">${S.db.length} day${S.db.length !== 1 ? 's' : ''} tracked &nbsp;&middot;&nbsp; last 30 days</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px">
+      <div style="font-size:24px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif)">Database</div>
+      <select onchange="window.changeDbFilter(this.value)" style="font-size:11px;border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:4px 6px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans);outline:none;cursor:pointer">
+        <option value="weekly" ${S.dbFilter === 'weekly' ? 'selected' : ''}>Weekly</option>
+        <option value="monthly" ${S.dbFilter === 'monthly' ? 'selected' : ''}>Monthly</option>
+        <option value="all" ${S.dbFilter === 'all' ? 'selected' : ''}>All</option>
+      </select>
+    </div>
+    <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:24px">${S.db.length} day${S.db.length !== 1 ? 's' : ''} shown &nbsp;&middot;&nbsp; ${filterDesc}</div>
     
     <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;box-shadow: 0 2px 8px var(--color-shadow)">
       <table style="width:100%;border-collapse:collapse;table-layout:fixed">
@@ -1022,15 +1182,29 @@ window.confI = sec => {
     return;
   }
   const item = { id: uid(), label };
+  const clean = cleanNameForFormula(label);
+  
   if (sec === 'study') {
     S.cs.push(item);
     sv('cs', S.cs);
+    if (!S.prodFormula.toLowerCase().includes(clean)) {
+      S.prodFormula = S.prodFormula ? `${S.prodFormula} + ${clean}(2)` : `${clean}(2)`;
+      sv('prod_formula', S.prodFormula);
+    }
   } else if (sec === 'fun') {
     S.cf.push(item);
     sv('cf', S.cf);
+    if (!S.prodFormula.toLowerCase().includes(clean)) {
+      S.prodFormula = S.prodFormula ? `${S.prodFormula} + ${clean}(2)` : `${clean}(2)`;
+      sv('prod_formula', S.prodFormula);
+    }
   } else {
     S.ch.push(item);
     sv('ch', S.ch);
+    if (!S.healthFormula.toLowerCase().includes(clean)) {
+      S.healthFormula = S.healthFormula ? `${S.healthFormula} + ${clean}(2)` : `${clean}(2)`;
+      sv('health_formula', S.healthFormula);
+    }
   }
   S.as = null;
   render();
@@ -1104,6 +1278,28 @@ window.changeNotifierInterval = (type, val) => {
   S.notifiers[type].interval = parseInt(val);
   sv('notifiers', S.notifiers);
   updateNotificationScheduling();
+};
+
+window.changeDbFilter = async (val) => {
+  S.dbFilter = val;
+  await sv('db_filter', val);
+  S.db = null;
+  render();
+  await loadDb();
+  render();
+};
+
+window.saveConsoleWeights = async (type, val) => {
+  if (type === 'prod') {
+    S.prodFormula = val;
+    await sv('prod_formula', val);
+  } else {
+    S.healthFormula = val;
+    await sv('health_formula', val);
+  }
+  await loadWd();
+  await loadDb();
+  render();
 };
 
 // 8. Sidebar & Drive Alert functions

@@ -560,7 +560,7 @@ input:checked + .slider-toggle:before {
   top: 0;
   left: 0;
   bottom: 0;
-  width: 250px;
+  width: 160px;
   background: var(--color-background-primary);
   border-right: 0.5px solid var(--color-border-secondary);
   z-index: 100;
@@ -660,6 +660,9 @@ input:checked + .slider-toggle:before {
   text-decoration: none;
   border-radius: 6px;
   transition: background-color 0.15s, color 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-item i {
