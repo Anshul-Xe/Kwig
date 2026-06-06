@@ -1,6 +1,6 @@
 {
   "name": "kwig-mobile",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Kwig - Minimalist productivity, health, and task tracker mobile app",
   "main": "index.html",
   "scripts": {
