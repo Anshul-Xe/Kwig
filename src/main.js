@@ -248,6 +248,11 @@ async function loadAll() {
   S.dbFilter = await ld('db_filter', 'monthly');
   S.prodFormula = await ld('prod_formula', 'linear_algebra(2) + statistics(2) + python(2) + project(2) + book_reading(2) + fl_studio(2) + speaking(2)');
   S.healthFormula = await ld('health_formula', 'water_meter(2) + conscious_meter(2) + water(2) + gym(2) + running(2) + food(2) + meditation(2)');
+  S.principles = await ld('kwig_principles', [
+    "Keep it simple.",
+    "Prioritize health.",
+    "Consistency beats intensity."
+  ]);
   
   // Parse Google OAuth redirect hash if present
   if (window.location.hash.includes('access_token=')) {
@@ -547,6 +552,15 @@ function renderHome() {
   const pD = prod.filter(i => S.pc[i.id]).length, hD = hlth.filter(i => S.hc[i.id]).length;
   const totals = getHabitTotals(S.pc, S.hc);
 
+  const principlesCount = S.principles ? S.principles.length : 0;
+  let activePrincipleText = "No principles set. Tap to add one!";
+  if (principlesCount > 0) {
+    const dayOfYear = Math.floor((_t - new Date(_t.getFullYear(), 0, 0)) / 86400000);
+    const index = dayOfYear % principlesCount;
+    activePrincipleText = S.principles[index];
+  }
+  const displayPrinciple = activePrincipleText.trim() || "Empty principle. Tap to edit...";
+
   // Compute weekly habit matrix html
   const mHabits = (() => {
     const study = si().map(h => ({ ...h, type: 'prod', category: 'Study', icon: getHabitIcon(h.id, 'Study') }));
@@ -743,10 +757,10 @@ function renderHome() {
       <div style="font-size:26px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif);line-height:1.2;margin-bottom:24px">${DS}</div>
     </div>
     
-    <div class="tc f2" onclick="nxt()" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-left:3px solid var(--color-text-primary);border-radius:0 8px 8px 0;padding:14px 16px 12px;margin-bottom:24px">
-      <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px">Thought of the day</div>
-      <div id="tt" style="font-size:14px;color:var(--color-text-primary);font-family:var(--font-serif);font-style:italic;line-height:1.65;margin-bottom:10px">&ldquo;${THOUGHTS[S.ti]}&rdquo;</div>
-      <div id="th" style="font-size:11px;color:var(--color-text-tertiary);text-align:right">${S.ti + 1}/${THOUGHTS.length} &middot; tap for next</div>
+    <div class="tc f2" onclick="goTo('principles')" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-left:3px solid var(--color-text-primary);border-radius:0 8px 8px 0;padding:14px 16px 12px;margin-bottom:24px;cursor:pointer">
+      <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px">Principle of the day</div>
+      <div id="tt" style="font-size:12px;color:var(--color-text-primary);font-family:'Silkscreen', monospace;line-height:1.6;margin-bottom:10px">&ldquo;${displayPrinciple}&rdquo;</div>
+      <div id="th" style="font-size:10px;color:var(--color-text-tertiary);text-align:right;font-family:'Silkscreen', monospace;">Tap to manage principles</div>
     </div>
     
     <div class="f3">
@@ -801,14 +815,14 @@ function renderProd() {
   const consoleHtml = `
     <div style="margin-top:28px;border-top:0.5px solid var(--color-border-tertiary);padding-top:20px">
       <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px">Weights Console</div>
-      <div style="background:#121212;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:10px 12px;font-family:'Courier New',Courier,monospace;box-shadow:inset 0 1px 4px rgba(0,0,0,0.6)">
-        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#00ff00;margin-bottom:6px">
+      <div style="background:#121212;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:10px 12px;font-family:'Silkscreen',monospace;box-shadow:inset 0 1px 4px rgba(0,0,0,0.6)">
+        <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#00ff00;margin-bottom:6px">
           <span>$ kwig --configure-weights</span>
         </div>
         <textarea onchange="window.saveConsoleWeights('prod', this.value)" 
-                  style="width:100%;height:48px;background:transparent;border:none;outline:none;color:#ffffff;font-family:'Courier New',Courier,monospace;font-size:11px;line-height:1.4;resize:none;box-sizing:border-box;padding:0;margin:0"
+                  style="width:100%;height:48px;background:transparent;border:none;outline:none;color:#ffffff;font-family:'Silkscreen',monospace;font-size:9px;line-height:1.4;resize:none;box-sizing:border-box;padding:0;margin:0"
                   placeholder="e.g. math(3) + python(2)">${S.prodFormula}</textarea>
-        <div style="font-size:9px;color:#888888;text-align:right;margin-top:4px">Edit weights & focus out to save</div>
+        <div style="font-size:8px;color:#888888;text-align:right;margin-top:4px">Edit weights & focus out to save</div>
       </div>
     </div>
   `;
@@ -878,14 +892,14 @@ function renderHealth() {
   const consoleHtml = `
     <div style="margin-top:28px;border-top:0.5px solid var(--color-border-tertiary);padding-top:20px">
       <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px">Weights Console</div>
-      <div style="background:#121212;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:10px 12px;font-family:'Courier New',Courier,monospace;box-shadow:inset 0 1px 4px rgba(0,0,0,0.6)">
-        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#00ff00;margin-bottom:6px">
+      <div style="background:#121212;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:10px 12px;font-family:'Silkscreen',monospace;box-shadow:inset 0 1px 4px rgba(0,0,0,0.6)">
+        <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#00ff00;margin-bottom:6px">
           <span>$ kwig --configure-weights</span>
         </div>
         <textarea onchange="window.saveConsoleWeights('health', this.value)" 
-                  style="width:100%;height:48px;background:transparent;border:none;outline:none;color:#ffffff;font-family:'Courier New',Courier,monospace;font-size:11px;line-height:1.4;resize:none;box-sizing:border-box;padding:0;margin:0"
+                  style="width:100%;height:48px;background:transparent;border:none;outline:none;color:#ffffff;font-family:'Silkscreen',monospace;font-size:9px;line-height:1.4;resize:none;box-sizing:border-box;padding:0;margin:0"
                   placeholder="e.g. water(3) + gym(2)">${S.healthFormula}</textarea>
-        <div style="font-size:9px;color:#888888;text-align:right;margin-top:4px">Edit weights & focus out to save</div>
+        <div style="font-size:8px;color:#888888;text-align:right;margin-top:4px">Edit weights & focus out to save</div>
       </div>
     </div>
   `;
@@ -1036,6 +1050,45 @@ function renderEditor() {
   </div>`;
 }
 
+function renderPrinciples() {
+  const listHtml = S.principles.map((pr, idx) => `
+    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px 12px;">
+      <textarea oninput="window.updatePrinciple(${idx}, this.value)" 
+                style="flex:1;background:transparent;border:none;outline:none;color:var(--color-text-primary);font-family:'Silkscreen', monospace;font-size:11px;line-height:1.5;resize:none;height:48px;padding:0;margin:0;"
+                placeholder="Enter principle...">${pr}</textarea>
+      <button onclick="window.deletePrinciple(${idx})" 
+              style="background:none;border:none;color:var(--color-accent-red);cursor:pointer;padding:4px;display:flex;align-items:center;justify-content:center;outline:none;" 
+              title="Delete Principle">
+        <i class="ti ti-trash" style="font-size:16px;"></i>
+      </button>
+    </div>
+  `).join('');
+
+  const empty = S.principles.length === 0 ? `
+    <div style="padding:48px 0; text-align:center; color:var(--color-text-tertiary); font-family:'Silkscreen', monospace; font-size:10px;">
+      No principles found.<br>Click the button below to add one.
+    </div>
+  ` : listHtml;
+
+  return `<div class="pg" style="padding:20px 0 20px">
+    <button class="back-btn" onclick="goTo('home')">
+      <i class="ti ti-arrow-left" style="font-size:15px" aria-hidden="true"></i>Back
+    </button>
+    
+    <div style="display:flex; align-items:center; justify-content:space-between; margin:18px 0 16px;">
+      <div>
+        <div style="font-size:20px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif)">Principles</div>
+        <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px;">Your personal life compass</div>
+      </div>
+      <button class="add-btn" onclick="window.addPrinciple()" style="font-family:'Silkscreen', monospace; font-size:10px; padding: 4px 8px;">+ Add Principle</button>
+    </div>
+    
+    <div style="margin-top:10px;">
+      ${empty}
+    </div>
+  </div>`;
+}
+
 function render() {
   const app = document.getElementById('app');
   if (!app) return;
@@ -1052,7 +1105,25 @@ function render() {
   else if (S.page === 'database') app.innerHTML = renderDb();
   else if (S.page === 'notes') app.innerHTML = renderNotes();
   else if (S.page === 'editor') app.innerHTML = renderEditor();
+  else if (S.page === 'principles') app.innerHTML = renderPrinciples();
 }
+
+window.updatePrinciple = (idx, val) => {
+  S.principles[idx] = val;
+  sv('kwig_principles', S.principles);
+};
+
+window.deletePrinciple = (idx) => {
+  S.principles.splice(idx, 1);
+  sv('kwig_principles', S.principles);
+  render();
+};
+
+window.addPrinciple = () => {
+  S.principles.push("");
+  sv('kwig_principles', S.principles);
+  render();
+};
 
 window.goTo = (p, skipHistory = false) => {
   const bubble = document.getElementById('image-control-bubble');

@@ -560,7 +560,7 @@ input:checked + .slider-toggle:before {
   top: 0;
   left: 0;
   bottom: 0;
-  width: 160px;
+  width: 200px;
   background: var(--color-background-primary);
   border-right: 0.5px solid var(--color-border-secondary);
   z-index: 100;
