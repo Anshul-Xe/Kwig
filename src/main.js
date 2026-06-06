@@ -116,6 +116,8 @@ let S = {
   sidebarExpanded: false, // Sidebar folder dropdown expanded
   gdriveToken: null,    // Google Drive access token
   gdriveClientId: '910899479357-oeqhpsg705kspesph1m6q10411r1h25o.apps.googleusercontent.com', // Default OAuth Client ID
+  githubToken: null,    // GitHub Gist PAT token
+  githubGistId: null,   // Linked Gist ID
   notifiers: {
     water: { enabled: false, interval: 1 },
     walk: { enabled: false, interval: 1 }
@@ -225,6 +227,8 @@ async function loadAll() {
   S.deleted_defaults = await ld('deleted_defaults', []);
   S.sidebarExpanded = await ld('sidebarExpanded', false);
   S.gdriveClientId = await ld('gdrive_client_id', '910899479357-oeqhpsg705kspesph1m6q10411r1h25o.apps.googleusercontent.com');
+  S.githubToken = await ld('github_token', null);
+  S.githubGistId = await ld('github_gist_id', null);
   
   // Parse Google OAuth redirect hash if present
   if (window.location.hash.includes('access_token=')) {
@@ -1058,19 +1062,242 @@ window.logoutGoogleDrive = async () => {
   alert("Signed out from Google Account.");
 };
 
-window.showClientConfigModal = () => {
-  const modal = document.getElementById('client-config-modal');
-  const input = document.getElementById('oauth-client-id-input');
-  if (modal && input) {
-    input.value = S.gdriveClientId || '';
+window.showSyncSettingsModal = () => {
+  const modal = document.getElementById('sync-settings-modal');
+  if (modal) {
     modal.classList.add('active');
+    
+    const gInput = document.getElementById('oauth-client-id-input');
+    if (gInput) gInput.value = S.gdriveClientId || '';
+    
+    const ghInput = document.getElementById('github-token-input');
+    if (ghInput) ghInput.value = S.githubToken || '';
+    
+    window.switchSyncTab('local');
   }
 };
 
-window.closeClientConfigModal = () => {
-  const modal = document.getElementById('client-config-modal');
+window.closeSyncSettingsModal = () => {
+  const modal = document.getElementById('sync-settings-modal');
   if (modal) {
     modal.classList.remove('active');
+  }
+};
+
+window.switchSyncTab = (tabId) => {
+  document.querySelectorAll('.sync-panel').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.sync-tab').forEach(t => t.classList.remove('active'));
+  
+  const panel = document.getElementById(`panel-${tabId}`);
+  const tab = document.getElementById(`tab-${tabId}`);
+  if (panel && tab) {
+    panel.style.display = 'block';
+    tab.classList.add('active');
+  }
+};
+
+// 1. Local File Backup Export/Import
+window.exportLocalBackup = () => {
+  try {
+    const backupData = {
+      version: 2,
+      timestamp: new Date().toISOString(),
+      localStorage: {}
+    };
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      backupData.localStorage[k] = localStorage.getItem(k);
+    }
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `kwig_backup_${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("Local backup export failed:", e);
+    alert("Export failed: " + e.message);
+  }
+};
+
+window.triggerLocalRestore = () => {
+  document.getElementById('import-backup-file').click();
+};
+
+document.getElementById('import-backup-file').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = event => {
+    try {
+      const backupData = JSON.parse(event.target.result);
+      if (!backupData || !backupData.localStorage) {
+        throw new Error("Invalid backup file format.");
+      }
+      
+      const count = Object.keys(backupData.localStorage).length;
+      if (confirm(`Valid backup file found.\n\nThis will restore ${count} records and overwrite all current app data. Are you sure you want to proceed?`)) {
+        localStorage.clear();
+        for (const [k, v] of Object.entries(backupData.localStorage)) {
+          localStorage.setItem(k, v);
+        }
+        alert("Backup successfully restored! App will now reload.");
+        window.location.reload();
+      }
+    } catch (err) {
+      alert("Restore failed: " + err.message);
+    }
+    e.target.value = ''; // clear input
+  };
+  reader.readAsText(file);
+});
+
+// 2. GitHub Gist Sync
+window.saveGithubConfig = async () => {
+  const input = document.getElementById('github-token-input');
+  if (!input) return;
+  
+  const token = input.value.trim();
+  if (!token) {
+    alert("Please enter a valid GitHub token.");
+    return;
+  }
+  
+  S.githubToken = token;
+  await sv('github_token', token);
+  
+  alert("GitHub Token saved!\nSyncing will create a private Gist for your Kwig backup.");
+  window.closeSyncSettingsModal();
+  window.syncToGithubGist();
+};
+
+window.logoutGithub = async () => {
+  S.githubToken = null;
+  S.githubGistId = null;
+  await sv('github_token', null);
+  await sv('github_gist_id', null);
+  window.renderAccountSync();
+  alert("Signed out from GitHub account.");
+};
+
+window.syncToGithubGist = async () => {
+  if (!S.githubToken) {
+    alert("Please configure a GitHub token first.");
+    return;
+  }
+  
+  const btn = document.getElementById('sb-sync-github-upload');
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) btn.innerHTML = '<i class="ti ti-loader rotate" style="display:inline-block; animation:spin 1s linear infinite;" aria-hidden="true"></i> Syncing...';
+  
+  try {
+    const backupData = {
+      version: 2,
+      timestamp: new Date().toISOString(),
+      localStorage: {}
+    };
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      backupData.localStorage[k] = localStorage.getItem(k);
+    }
+    
+    const body = {
+      description: "Kwig Application Sync Backup (Private)",
+      public: false,
+      files: {
+        "kwig_backup.json": {
+          content: JSON.stringify(backupData, null, 2)
+        }
+      }
+    };
+    
+    let res;
+    if (S.githubGistId) {
+      res = await fetch(`https://api.github.com/gists/${S.githubGistId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `token ${S.githubToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+    }
+    
+    if (!res || res.status === 404) {
+      res = await fetch('https://api.github.com/gists', {
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${S.githubToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        const gist = await res.json();
+        S.githubGistId = gist.id;
+        await sv('github_gist_id', gist.id);
+      }
+    }
+    
+    if (!res.ok) throw new Error(`GitHub Gist API error status: ${res.status}`);
+    alert("Data successfully synced privately to GitHub Gist cloud!");
+  } catch (err) {
+    console.error("GitHub sync failed:", err);
+    alert("GitHub Gist Sync failed:\n" + err.message);
+  } finally {
+    if (btn) btn.innerHTML = originalHtml;
+    window.renderAccountSync();
+  }
+};
+
+window.syncFromGithubGist = async () => {
+  if (!S.githubToken || !S.githubGistId) {
+    alert("No linked GitHub Gist found. Sync your data to GitHub first.");
+    return;
+  }
+  
+  const btn = document.getElementById('sb-sync-github-download');
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) btn.innerHTML = '<i class="ti ti-loader rotate" style="display:inline-block; animation:spin 1s linear infinite;" aria-hidden="true"></i> Downloading...';
+  
+  try {
+    const res = await fetch(`https://api.github.com/gists/${S.githubGistId}`, {
+      headers: {
+        'Authorization': `token ${S.githubToken}`
+      }
+    });
+    if (!res.ok) throw new Error(`Fetch Gist failed status: ${res.status}`);
+    
+    const gist = await res.json();
+    const file = gist.files["kwig_backup.json"];
+    if (!file || !file.content) throw new Error("kwig_backup.json file not found in linked Gist.");
+    
+    const backupData = JSON.parse(file.content);
+    if (!backupData || !backupData.localStorage) throw new Error("Malformed backup file content.");
+    
+    const count = Object.keys(backupData.localStorage).length;
+    const dateStr = new Date(backupData.timestamp || Date.now()).toLocaleString();
+    
+    if (confirm(`GitHub Gist Backup found from: ${dateStr}\n\nThis will restore ${count} keys and overwrite all current habits and notes. Proceed?`)) {
+      localStorage.clear();
+      for (const [k, v] of Object.entries(backupData.localStorage)) {
+        localStorage.setItem(k, v);
+      }
+      alert("Data successfully restored from GitHub Gist! Reloading...");
+      window.location.reload();
+    }
+  } catch (err) {
+    console.error("GitHub Gist download failed:", err);
+    alert("Failed to restore from GitHub Gist:\n" + err.message);
+  } finally {
+    if (btn) btn.innerHTML = originalHtml;
+    window.renderAccountSync();
   }
 };
 
@@ -1084,7 +1311,7 @@ window.saveClientConfigId = () => {
     }
     S.gdriveClientId = val;
     sv('gdrive_client_id', val);
-    window.closeClientConfigModal();
+    window.closeSyncSettingsModal();
     alert("Google Client ID saved successfully!\nYou can now sign in with Google.");
   }
 };
@@ -1093,15 +1320,29 @@ window.renderAccountSync = () => {
   const container = document.getElementById('sidebar-account-container');
   if (!container) return;
   
-  if (!S.gdriveToken) {
-    container.innerHTML = `
-      <a href="#" class="sidebar-item" id="sb-sync-login" onclick="event.preventDefault(); window.startGoogleDriveLogin();">
-        <i class="ti ti-brand-google" aria-hidden="true"></i> Sign In with Google
-      </a>
-    `;
-  } else {
+  if (S.githubToken) {
     container.innerHTML = `
       <div style="display:flex; flex-direction:column; gap:4px; padding: 2px 4px;">
+        <div style="font-size: 10px; color: var(--color-accent-green); padding: 0 10px; display:flex; align-items:center; gap:4px; font-weight:600; margin-bottom:2px;">
+          <i class="ti ti-brand-github"></i> Linked to GitHub
+        </div>
+        <a href="#" class="sidebar-item" id="sb-sync-github-upload" onclick="event.preventDefault(); window.syncToGithubGist();" style="padding: 6px 10px; background: rgba(56, 176, 0, 0.08);">
+          <i class="ti ti-cloud-upload" aria-hidden="true" style="color:var(--color-accent-green)"></i> Sync to GitHub
+        </a>
+        <a href="#" class="sidebar-item" id="sb-sync-github-download" onclick="event.preventDefault(); window.syncFromGithubGist();" style="padding: 6px 10px;">
+          <i class="ti ti-cloud-download" aria-hidden="true" style="color:var(--color-accent-blue)"></i> Restore Gist
+        </a>
+        <a href="#" class="sidebar-item" id="sb-sync-logout" onclick="event.preventDefault(); window.logoutGithub();" style="font-size:11px; padding:4px 10px; color:var(--color-text-tertiary); margin-top:2px;">
+          <i class="ti ti-logout" aria-hidden="true" style="font-size:12px;"></i> Unlink GitHub
+        </a>
+      </div>
+    `;
+  } else if (S.gdriveToken) {
+    container.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:4px; padding: 2px 4px;">
+        <div style="font-size: 10px; color: var(--color-accent-green); padding: 0 10px; display:flex; align-items:center; gap:4px; font-weight:600; margin-bottom:2px;">
+          <i class="ti ti-brand-google"></i> Google Drive Synced
+        </div>
         <a href="#" class="sidebar-item" id="sb-sync-upload" onclick="event.preventDefault(); window.syncToGoogleDrive();" style="padding: 6px 10px; background: rgba(56, 176, 0, 0.08);">
           <i class="ti ti-cloud-upload" aria-hidden="true" style="color:var(--color-accent-green)"></i> Sync to Drive
         </a>
@@ -1110,6 +1351,17 @@ window.renderAccountSync = () => {
         </a>
         <a href="#" class="sidebar-item" id="sb-sync-logout" onclick="event.preventDefault(); window.logoutGoogleDrive();" style="font-size:11px; padding:4px 10px; color:var(--color-text-tertiary); margin-top:2px;">
           <i class="ti ti-logout" aria-hidden="true" style="font-size:12px;"></i> Sign Out
+        </a>
+      </div>
+    `;
+  } else {
+    container.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:4px; padding: 2px 4px;">
+        <a href="#" class="sidebar-item" onclick="event.preventDefault(); window.showSyncSettingsModal();">
+          <i class="ti ti-settings" aria-hidden="true"></i> Configure Sync / Backup
+        </a>
+        <a href="#" class="sidebar-item" onclick="event.preventDefault(); window.exportLocalBackup();">
+          <i class="ti ti-download" aria-hidden="true"></i> Quick Export File
         </a>
       </div>
     `;

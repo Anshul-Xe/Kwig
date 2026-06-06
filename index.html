@@ -61,7 +61,7 @@
 
         <div class="sidebar-section" style="display:flex; align-items:center; justify-content:space-between; width:100%; padding-right:6px; box-sizing:border-box;">
           <span>Account</span>
-          <button id="sb-account-settings" onclick="event.preventDefault(); event.stopPropagation(); window.showClientConfigModal();" style="background:none; border:none; color:var(--color-text-tertiary); padding:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; outline:none;" title="Configure Google Client ID">
+          <button id="sb-account-settings" onclick="event.preventDefault(); event.stopPropagation(); window.showSyncSettingsModal();" style="background:none; border:none; color:var(--color-text-tertiary); padding:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; outline:none;" title="Configure Sync & Backup">
             <i class="ti ti-settings" style="font-size:12px;"></i>
           </button>
         </div>
@@ -99,17 +99,58 @@
       </div>
     </div>
 
-    <!-- Client ID Configuration Modal -->
-    <div id="client-config-modal" class="modal-overlay">
-      <div class="modal-card">
-        <div class="modal-title">Google Client ID Config</div>
-        <div class="modal-desc" style="margin-bottom:12px; font-size:11px; line-height:1.4; color:var(--color-text-tertiary);">
-          To sync with Google Drive, enter a Web Client ID from your Google Cloud Console. Make sure <strong>https://localhost</strong> is added as an Authorized Redirect URI.
+    <!-- Sync Settings Configuration Modal -->
+    <div id="sync-settings-modal" class="modal-overlay">
+      <div class="modal-card" style="max-width: 320px; padding: 18px;">
+        <div class="modal-title">Cloud Sync & Backup</div>
+        
+        <!-- Tab selector headers -->
+        <div class="sync-tabs" style="display:flex; border-bottom: 0.5px solid var(--color-border-tertiary); margin-bottom:12px; gap:8px;">
+          <button class="sync-tab active" onclick="window.switchSyncTab('local')" id="tab-local">Local</button>
+          <button class="sync-tab" onclick="window.switchSyncTab('github')" id="tab-github">GitHub Gist</button>
+          <button class="sync-tab" onclick="window.switchSyncTab('gdrive')" id="tab-gdrive">Google</button>
         </div>
-        <input type="text" id="oauth-client-id-input" style="width:100%; padding:10px; border-radius:var(--border-radius-md); border:0.5px solid var(--color-border-secondary); background:var(--color-background-primary); color:var(--color-text-primary); font-family:var(--font-sans); font-size:12px; box-sizing:border-box; outline:none; margin-bottom:16px;" placeholder="Paste your Client ID here...">
-        <div class="modal-buttons">
-          <button onclick="window.closeClientConfigModal()" class="modal-btn modal-btn-cancel">Cancel</button>
-          <button onclick="window.saveClientConfigId()" class="modal-btn" style="background:var(--color-text-primary); color:var(--color-background-primary); border:none; border-radius:var(--border-radius-md); padding:8px 16px; cursor:pointer; font-weight:600; font-size:12px;">Save Config</button>
+
+        <!-- Local Sync Panel -->
+        <div class="sync-panel active" id="panel-local">
+          <div class="modal-desc" style="font-size:11px; margin-bottom:14px; line-height:1.4; color:var(--color-text-tertiary);">
+            Export all data as a backup JSON file, or restore from an existing backup. Save the file to any cloud storage manually!
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button onclick="window.exportLocalBackup()" class="modal-btn" style="background:var(--color-background-secondary); color:var(--color-text-primary); width:100%; border:0.5px solid var(--color-border-secondary); font-size:12px; font-weight:600; padding:8px;">
+              <i class="ti ti-download" style="margin-right:6px;"></i> Export Backup File
+            </button>
+            <button onclick="window.triggerLocalRestore()" class="modal-btn" style="background:var(--color-background-secondary); color:var(--color-text-primary); width:100%; border:0.5px solid var(--color-border-secondary); font-size:12px; font-weight:600; padding:8px;">
+              <i class="ti ti-upload" style="margin-right:6px;"></i> Import Backup File
+            </button>
+          </div>
+        </div>
+
+        <!-- GitHub Sync Panel -->
+        <div class="sync-panel" id="panel-github" style="display:none;">
+          <div class="modal-desc" style="font-size:10px; margin-bottom:8px; line-height:1.3; color:var(--color-text-tertiary);">
+            Enter a GitHub Personal Access Token (with <strong>gist</strong> scope) to securely save data as a private Gist under your GitHub cloud.
+          </div>
+          <input type="password" id="github-token-input" style="width:100%; padding:8px; border-radius:var(--border-radius-md); border:0.5px solid var(--color-border-secondary); background:var(--color-background-primary); color:var(--color-text-primary); font-size:11px; margin-bottom:8px; outline:none; box-sizing:border-box;" placeholder="Paste GitHub Token...">
+          <button onclick="window.saveGithubConfig()" class="modal-btn" style="background:var(--color-text-primary); color:var(--color-background-primary); width:100%; margin-top:4px; font-size:12px; font-weight:600; padding:8px; border:none; border-radius:var(--border-radius-md); cursor:pointer;">
+            Save & Link GitHub
+          </button>
+        </div>
+
+        <!-- Google Drive Sync Panel -->
+        <div class="sync-panel" id="panel-gdrive" style="display:none;">
+          <div class="modal-desc" style="font-size:10px; margin-bottom:8px; line-height:1.3; color:var(--color-text-tertiary);">
+            Enter Google OAuth Client ID (Web Application type). Authorized Redirect URI must include <strong>https://localhost</strong>.
+          </div>
+          <input type="text" id="oauth-client-id-input" style="width:100%; padding:8px; border-radius:var(--border-radius-md); border:0.5px solid var(--color-border-secondary); background:var(--color-background-primary); color:var(--color-text-primary); font-size:11px; margin-bottom:8px; outline:none; box-sizing:border-box;" placeholder="Enter Client ID...">
+          <button onclick="window.saveClientConfigId()" class="modal-btn" style="background:var(--color-text-primary); color:var(--color-background-primary); width:100%; margin-top:4px; font-size:12px; font-weight:600; padding:8px; border:none; border-radius:var(--border-radius-md); cursor:pointer;">
+            Save Client ID
+          </button>
+        </div>
+
+        <div style="height:0.5px; background:var(--color-border-tertiary); margin:14px 0 10px;"></div>
+        <div style="text-align:right;">
+          <button onclick="window.closeSyncSettingsModal()" class="modal-btn modal-btn-cancel" style="padding:6px 12px; font-size:12px;">Close</button>
         </div>
       </div>
     </div>
@@ -132,6 +173,7 @@
 
   <!-- Hidden Image Import File Input Helper -->
   <input type="file" id="import-image-file" accept="image/*" style="display:none">
+  <input type="file" id="import-backup-file" accept=".json" style="display:none">
 
   <!-- App logic -->
   <script type="module" src="/src/main.js"></script>
