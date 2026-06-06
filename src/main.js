@@ -116,6 +116,7 @@ let S = {
   sidebarExpanded: false, // Sidebar folder dropdown expanded
   gdriveToken: null,    // Google Drive access token
   gdriveClientId: '910899479357-oeqhpsg705kspesph1m6q10411r1h25o.apps.googleusercontent.com', // Default OAuth Client ID
+  weeklyHabitStates: {}, // Habit states for the last 7 days
   notifiers: {
     water: { enabled: false, interval: 1 },
     walk: { enabled: false, interval: 1 }
@@ -225,6 +226,21 @@ async function loadAll() {
   S.deleted_defaults = await ld('deleted_defaults', []);
   S.sidebarExpanded = await ld('sidebarExpanded', false);
   S.gdriveClientId = await ld('gdrive_client_id', '910899479357-oeqhpsg705kspesph1m6q10411r1h25o.apps.googleusercontent.com');
+  
+  // Load weekly habit states
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(_t);
+    d.setDate(d.getDate() - i);
+    days.push(gdk(d));
+  }
+  S.weeklyHabitStates = {};
+  for (const dk of days) {
+    S.weeklyHabitStates[dk] = {
+      prod: await ld(`prod-${dk}`, {}),
+      health: await ld(`health-${dk}`, {})
+    };
+  }
   
   // Parse Google OAuth redirect hash if present
   if (window.location.hash.includes('access_token=')) {
@@ -406,7 +422,82 @@ function aiform(sec) {
 function renderHome() {
   const prod = ai(), hlth = hi();
   const pD = prod.filter(i => S.pc[i.id]).length, hD = hlth.filter(i => S.hc[i.id]).length;
-  
+
+  // Compute weekly habit matrix html
+  const mHabits = (() => {
+    const study = si().map(h => ({ ...h, type: 'prod', category: 'Study', icon: getHabitIcon(h.id, 'Study') }));
+    const fun = fi().map(h => ({ ...h, type: 'prod', category: 'Fun', icon: getHabitIcon(h.id, 'Fun') }));
+    const health = hi().map(h => ({ ...h, type: 'health', category: 'Health', icon: getHabitIcon(h.id, 'Health') }));
+    return [...study, ...fun, ...health];
+  })();
+
+  const mDays = (() => {
+    const list = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(_t);
+      d.setDate(d.getDate() - i);
+      list.push({
+        dateKey: gdk(d),
+        dayName: DAYS[d.getDay()].slice(0, 3),
+        isToday: i === 0
+      });
+    }
+    return list;
+  })();
+
+  const mHeaders = mDays.map(d => {
+    const inner = d.isToday 
+      ? `<span style="background:var(--color-text-primary);color:var(--color-background-primary);border-radius:4px;padding:2px 5px;font-size:9px;font-weight:700">${d.dayName}</span>` 
+      : d.dayName;
+    return `<th style="padding:10px 4px;text-align:center;font-size:10px;font-weight:600;color:var(--color-text-tertiary)">${inner}</th>`;
+  }).join('');
+
+  const mRows = mHabits.map(h => {
+    let color = 'var(--color-accent-blue)';
+    if (h.category === 'Fun') color = 'var(--color-accent-orange)';
+    if (h.category === 'Health') color = 'var(--color-accent-green)';
+    
+    const cells = mDays.map(d => {
+      const isCh = S.weeklyHabitStates[d.dateKey] && S.weeklyHabitStates[d.dateKey][h.type] && S.weeklyHabitStates[d.dateKey][h.type][h.id];
+      return `<td style="padding:6px 4px;text-align:center;vertical-align:middle">
+        <div onclick="window.togWeeklyHabit('${h.id}','${d.dateKey}','${h.type}')" 
+             style="width:16px;height:16px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;cursor:pointer;
+                    border:1.5px solid ${isCh ? color : 'var(--color-border-secondary)'};
+                    background-color: ${isCh ? color : 'transparent'};
+                    transition:all 0.15s ease;"
+             title="${h.label} (${d.dayName})">
+          ${isCh ? `<i class="ti ti-check" style="font-size:9px;color:var(--color-background-primary);font-weight:bold"></i>` : ''}
+        </div>
+      </td>`;
+    }).join('');
+    
+    return `<tr style="border-bottom:0.5px solid var(--color-border-tertiary)">
+      <td style="padding:6px 4px;text-align:center;vertical-align:middle">
+        <div style="font-size:14px;color:${color};display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary)" title="${h.label}">
+          <i class="${h.icon}"></i>
+        </div>
+      </td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  const matrixHtml = `<div class="f4" style="margin-bottom:24px">
+    <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px">Habit Matrix</div>
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow-x:auto;box-shadow: 0 2px 8px var(--color-shadow)">
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+        <thead>
+          <tr style="border-bottom:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary)">
+            <th style="width:40px;padding:10px 4px;text-align:center;font-size:10px;font-weight:600;color:var(--color-text-tertiary)">Habit</th>
+            ${mHeaders}
+          </tr>
+        </thead>
+        <tbody>
+          ${mRows}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+
   const tRows = S.tasks.map(t => {
     const od = t.deadline && t.deadline < tiso() && !t.done;
     const dlColor = od ? 'var(--color-accent-red)' : 'var(--color-text-secondary)';
@@ -563,6 +654,9 @@ function renderHome() {
         ${tRows}${tEmpty}${tForm}
       </div>
     </div>
+    
+    <!-- Weekly Habit Grid Matrix -->
+    ${matrixHtml}
     
     <!-- Reminders / Notifiers -->
     ${notifierHtml}
@@ -845,6 +939,47 @@ window.togI = (id, type) => {
   updWd();
   render();
 };
+
+window.togWeeklyHabit = async (habitId, dateKey, type) => {
+  if (!S.weeklyHabitStates[dateKey]) {
+    S.weeklyHabitStates[dateKey] = { prod: {}, health: {} };
+  }
+  S.weeklyHabitStates[dateKey][type][habitId] = !S.weeklyHabitStates[dateKey][type][habitId];
+  await sv(`${type}-${dateKey}`, S.weeklyHabitStates[dateKey][type]);
+  
+  if (dateKey === TK) {
+    if (type === 'prod') {
+      S.pc[habitId] = S.weeklyHabitStates[dateKey][type][habitId];
+    } else {
+      S.hc[habitId] = S.weeklyHabitStates[dateKey][type][habitId];
+    }
+  }
+  await loadWd();
+  await loadDb();
+  render();
+};
+
+function getHabitIcon(id, category) {
+  const mapping = {
+    linear_algebra: 'ti ti-math-symbols',
+    statistics: 'ti ti-chart-bar',
+    python: 'ti ti-brand-python',
+    project: 'ti ti-rocket',
+    book_reading: 'ti ti-book',
+    fl_studio: 'ti ti-music',
+    speaking: 'ti ti-microphone',
+    water: 'ti ti-droplet',
+    gym: 'ti ti-barbell',
+    running: 'ti ti-run',
+    food: 'ti ti-apple',
+    meditation: 'ti ti-brain'
+  };
+  if (mapping[id]) return mapping[id];
+  if (category === 'Study') return 'ti ti-notebook';
+  if (category === 'Fun') return 'ti ti-sparkles';
+  return 'ti ti-heart';
+}
+
 
 window.togT = id => {
   const t = S.tasks.find(x => x.id === id);
