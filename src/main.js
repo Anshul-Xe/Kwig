@@ -581,7 +581,7 @@ function renderHome() {
       { id: 'conscious_meter', label: 'Consciousness', type: 'health', category: 'Health', icon: getHabitIcon('conscious_meter', 'Health'), isDropdown: true, dropdownType: 'conscious' }
     ];
     
-    return [...study, ...fun, ...specialHealth, ...healthList];
+    return [...study, ...fun, ...healthList, ...specialHealth];
   })();
 
   const mDays = (() => {
@@ -614,26 +614,28 @@ function renderHome() {
       if (h.isDropdown) {
         const hState = S.weeklyHabitStates[d.dateKey] && S.weeklyHabitStates[d.dateKey].health ? S.weeklyHabitStates[d.dateKey].health : {};
         if (h.dropdownType === 'water') {
-          const wLvl = hState.water_level !== undefined ? hState.water_level : 1.0;
-          const options = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0].map(val => {
-            return `<option value="${val}" ${wLvl === val ? 'selected' : ''}>${val.toFixed(1)}L</option>`;
-          }).join('');
+          const hasWater = hState.water_level !== undefined && hState.water_level !== null;
+          const wLvl = hState.water_level;
+          const display = hasWater ? (wLvl % 1 === 0 ? wLvl.toFixed(0) + 'L' : wLvl.toFixed(1) + 'L') : 'v';
           return `<td style="padding:4px 2px;text-align:center;vertical-align:middle">
-            <select onchange="window.changeWeeklyLevel('${d.dateKey}', 'water', this.value)" 
-                    style="font-size:10px;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:2px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans);outline:none;cursor:pointer;width:100%;max-width:48px;text-align:center">
-              ${options}
-            </select>
+            <div onclick="window.openWeeklyLevelDropdown(event, '${d.dateKey}', 'water')" 
+                 style="font-size:10px; font-weight:600; color:var(--color-title-faded); cursor:pointer; user-select:none; display:inline-flex; align-items:center; justify-content:center; gap:2px; width:100%; height:20px; border-radius:4px; transition: background-color 0.15s;"
+                 onmouseover="this.style.background='var(--color-background-secondary)'"
+                 onmouseout="this.style.background='transparent'">
+              ${display}
+            </div>
           </td>`;
         } else {
-          const cLvl = hState.conscious_level !== undefined ? hState.conscious_level : 4;
-          const options = [1, 2, 3, 4, 5, 6].map(val => {
-            return `<option value="${val}" ${cLvl === val ? 'selected' : ''}>${val}</option>`;
-          }).join('');
+          const hasConscious = hState.conscious_level !== undefined && hState.conscious_level !== null;
+          const cLvl = hState.conscious_level;
+          const display = hasConscious ? cLvl : 'v';
           return `<td style="padding:4px 2px;text-align:center;vertical-align:middle">
-            <select onchange="window.changeWeeklyLevel('${d.dateKey}', 'conscious', this.value)" 
-                    style="font-size:10px;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:2px 4px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans);outline:none;cursor:pointer;width:100%;max-width:38px;text-align:center">
-              ${options}
-            </select>
+            <div onclick="window.openWeeklyLevelDropdown(event, '${d.dateKey}', 'conscious')" 
+                 style="font-size:10px; font-weight:600; color:var(--color-title-faded); cursor:pointer; user-select:none; display:inline-flex; align-items:center; justify-content:center; gap:2px; width:100%; height:20px; border-radius:4px; transition: background-color 0.15s;"
+                 onmouseover="this.style.background='var(--color-background-secondary)'"
+                 onmouseout="this.style.background='transparent'">
+              ${display}
+            </div>
           </td>`;
         }
       }
@@ -1465,40 +1467,174 @@ window.updateConsciousSlider = val => {
 };
 
 window.changeWeeklyLevel = async (dateKey, type, value) => {
-  const floatVal = parseFloat(value);
   if (!S.weeklyHabitStates[dateKey]) {
     S.weeklyHabitStates[dateKey] = { prod: {}, health: {} };
   }
   
   if (type === 'water') {
-    S.weeklyHabitStates[dateKey].health.water_level = floatVal;
+    const floatVal = (value === null || value === 'null') ? null : parseFloat(value);
+    if (floatVal === null) {
+      delete S.weeklyHabitStates[dateKey].health.water_level;
+    } else {
+      S.weeklyHabitStates[dateKey].health.water_level = floatVal;
+    }
     await sv(`health-${dateKey}`, S.weeklyHabitStates[dateKey].health);
     if (dateKey === TK) {
-      S.hc.water_level = floatVal;
+      if (floatVal === null) {
+        delete S.hc.water_level;
+      } else {
+        S.hc.water_level = floatVal;
+      }
+      await sv(`health-${TK}`, S.hc);
       const el = document.getElementById('water-slider-value');
-      if (el) el.textContent = `${floatVal.toFixed(1)} L`;
+      if (el) el.textContent = floatVal !== null ? `${floatVal.toFixed(1)} L` : '1.0 L';
       const slider = document.querySelector('input[oninput*="updateWaterSlider"]');
-      if (slider) slider.value = floatVal;
+      if (slider) slider.value = floatVal !== null ? floatVal : 1.0;
     }
   } else if (type === 'conscious') {
-    const intVal = parseInt(value);
-    S.weeklyHabitStates[dateKey].health.conscious_level = intVal;
+    const intVal = (value === null || value === 'null') ? null : parseInt(value);
+    if (intVal === null) {
+      delete S.weeklyHabitStates[dateKey].health.conscious_level;
+    } else {
+      S.weeklyHabitStates[dateKey].health.conscious_level = intVal;
+    }
     await sv(`health-${dateKey}`, S.weeklyHabitStates[dateKey].health);
     if (dateKey === TK) {
-      S.hc.conscious_level = intVal;
+      if (intVal === null) {
+        delete S.hc.conscious_level;
+      } else {
+        S.hc.conscious_level = intVal;
+      }
+      await sv(`health-${TK}`, S.hc);
       const el = document.getElementById('conscious-slider-value');
       if (el) {
-        const text = intVal <= 2 ? "Low 😴" : intVal <= 4 ? "Decent 🙂" : "High 🧠";
-        el.textContent = `${intVal} - ${text}`;
-        el.style.color = intVal <= 2 ? 'var(--color-accent-red)' : intVal <= 4 ? 'var(--color-accent-orange)' : 'var(--color-accent-green)';
+        if (intVal !== null) {
+          const text = intVal <= 2 ? "Low 😴" : intVal <= 4 ? "Decent 🙂" : "High 🧠";
+          el.textContent = `${intVal} - ${text}`;
+          el.style.color = intVal <= 2 ? 'var(--color-accent-red)' : intVal <= 4 ? 'var(--color-accent-orange)' : 'var(--color-accent-green)';
+        } else {
+          el.textContent = '4 - Decent 🙂';
+          el.style.color = 'var(--color-accent-orange)';
+        }
       }
       const slider = document.querySelector('input[oninput*="updateConsciousSlider"]');
-      if (slider) slider.value = intVal;
+      if (slider) slider.value = intVal !== null ? intVal : 4;
     }
   }
   
   updWd();
   render();
+};
+
+window.openWeeklyLevelDropdown = (event, dateKey, type) => {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  
+  window.closeAllWeeklyDropdowns();
+  
+  const dropdown = document.createElement('div');
+  dropdown.className = 'weekly-level-dropdown-popover';
+  dropdown.style.cssText = `
+    position: absolute;
+    background: var(--color-background-primary);
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px var(--color-shadow);
+    z-index: 1000;
+    max-height: 200px;
+    overflow-y: auto;
+    width: 65px;
+    padding: 4px 0;
+    opacity: 0;
+    transform: scale(0.95) translateY(-5px);
+    transform-origin: top center;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  `;
+  
+  const hState = S.weeklyHabitStates[dateKey] && S.weeklyHabitStates[dateKey].health ? S.weeklyHabitStates[dateKey].health : {};
+  
+  let options = [];
+  if (type === 'water') {
+    const wLvl = hState.water_level;
+    const isNoneSelected = wLvl === undefined || wLvl === null;
+    const noneHtml = `<div onclick="window.selectWeeklyLevel('${dateKey}', 'water', null)" 
+                 style="padding: 6px 8px; font-size: 11px; font-weight: 600; text-align: center; cursor: pointer; color: ${isNoneSelected ? 'var(--color-accent-green)' : 'var(--color-text-tertiary)'}; background: ${isNoneSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}; transition: background 0.1s;"
+                 onmouseover="this.style.background='var(--color-background-secondary)'"
+                 onmouseout="this.style.background='${isNoneSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}'">
+      v
+    </div>`;
+    
+    options = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0].map(val => {
+      const display = val % 1 === 0 ? val.toFixed(0) + 'L' : val.toFixed(1) + 'L';
+      const isSelected = wLvl === val;
+      return `<div onclick="window.selectWeeklyLevel('${dateKey}', 'water', ${val})" 
+                   style="padding: 6px 8px; font-size: 11px; font-weight: 600; text-align: center; cursor: pointer; color: ${isSelected ? 'var(--color-accent-green)' : 'var(--color-text-secondary)'}; background: ${isSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}; transition: background 0.1s;"
+                   onmouseover="this.style.background='var(--color-background-secondary)'"
+                   onmouseout="this.style.background='${isSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}'">
+        ${display}
+      </div>`;
+    });
+    options.unshift(noneHtml);
+  } else {
+    const cLvl = hState.conscious_level;
+    const isNoneSelected = cLvl === undefined || cLvl === null;
+    const noneHtml = `<div onclick="window.selectWeeklyLevel('${dateKey}', 'conscious', null)" 
+                 style="padding: 6px 8px; font-size: 11px; font-weight: 600; text-align: center; cursor: pointer; color: ${isNoneSelected ? 'var(--color-accent-green)' : 'var(--color-text-tertiary)'}; background: ${isNoneSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}; transition: background 0.1s;"
+                 onmouseover="this.style.background='var(--color-background-secondary)'"
+                 onmouseout="this.style.background='${isNoneSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}'">
+      v
+    </div>`;
+    
+    options = [1, 2, 3, 4, 5, 6].map(val => {
+      const isSelected = cLvl === val;
+      return `<div onclick="window.selectWeeklyLevel('${dateKey}', 'conscious', ${val})" 
+                   style="padding: 6px 8px; font-size: 11px; font-weight: 600; text-align: center; cursor: pointer; color: ${isSelected ? 'var(--color-accent-green)' : 'var(--color-text-secondary)'}; background: ${isSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}; transition: background 0.1s;"
+                   onmouseover="this.style.background='var(--color-background-secondary)'"
+                   onmouseout="this.style.background='${isSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}'">
+        ${val}
+      </div>`;
+    });
+    options.unshift(noneHtml);
+  }
+  
+  dropdown.innerHTML = options.join('');
+  document.body.appendChild(dropdown);
+  
+  const rect = event.currentTarget.getBoundingClientRect();
+  const top = rect.bottom + window.scrollY + 4;
+  const left = rect.left + window.scrollX + rect.width / 2 - 32.5;
+  
+  dropdown.style.top = top + 'px';
+  dropdown.style.left = left + 'px';
+  
+  setTimeout(() => {
+    dropdown.style.opacity = '1';
+    dropdown.style.transform = 'scale(1) translateY(0)';
+  }, 10);
+  
+  const closeHandler = (e) => {
+    if (!dropdown.contains(e.target) && e.target !== event.currentTarget) {
+      window.closeAllWeeklyDropdowns();
+      document.removeEventListener('click', closeHandler);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closeHandler), 10);
+};
+
+window.closeAllWeeklyDropdowns = () => {
+  const existing = document.querySelectorAll('.weekly-level-dropdown-popover');
+  existing.forEach(el => {
+    el.style.opacity = '0';
+    el.style.transform = 'scale(0.95) translateY(-5px)';
+    setTimeout(() => el.remove(), 150);
+  });
+};
+
+window.selectWeeklyLevel = async (dateKey, type, value) => {
+  window.closeAllWeeklyDropdowns();
+  await window.changeWeeklyLevel(dateKey, type, value);
 };
 
 window.showHabitTooltip = (event, label) => {
@@ -1515,13 +1651,14 @@ window.showHabitTooltip = (event, label) => {
   tooltip.textContent = label;
   tooltip.style.cssText = `
     position: absolute;
-    background: var(--color-text-primary);
-    color: var(--color-background-primary);
+    background: var(--color-background-secondary);
+    color: var(--color-text-primary);
     padding: 4px 8px;
     font-size: 10px;
     font-weight: 600;
     border-radius: 4px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    border: 0.5px solid var(--color-border-secondary);
+    box-shadow: 0 4px 12px var(--color-shadow);
     white-space: nowrap;
     z-index: 1000;
     pointer-events: none;
@@ -1612,10 +1749,12 @@ window.openIconSelectorModal = (habitId, label) => {
   const currentIcon = getHabitIcon(habitId, '');
   
   const PRESET_ICONS = [
-    'ti ti-barbell', 'ti ti-run', 'ti ti-droplet', 'ti ti-brain', 'ti ti-heart', 'ti ti-leaf', 'ti ti-zzz', 'ti ti-apple', 'ti ti-pill', 'ti ti-bike',
-    'ti ti-book', 'ti ti-pencil', 'ti ti-code', 'ti ti-device-laptop', 'ti ti-math-symbols', 'ti ti-calculator', 'ti ti-briefcase', 'ti ti-chart-bar', 'ti ti-calendar', 'ti ti-bulb',
-    'ti ti-music', 'ti ti-headphones', 'ti ti-microphone', 'ti ti-camera', 'ti ti-device-gamepad-2', 'ti ti-coffee', 'ti ti-beer', 'ti ti-movie', 'ti ti-palette', 'ti ti-plane',
-    'ti ti-home', 'ti ti-star', 'ti ti-flag', 'ti ti-clock', 'ti ti-compass', 'ti ti-target', 'ti ti-check', 'ti ti-settings', 'ti ti-cloud', 'ti ti-lock'
+    'ti ti-barbell', 'ti ti-run', 'ti ti-bike', 'ti ti-swimming', 'ti ti-heart', 'ti ti-heartbeat', 'ti ti-activity', 'ti ti-flame', 'ti ti-droplet', 'ti ti-walk',
+    'ti ti-zzz', 'ti ti-moon', 'ti ti-sun', 'ti ti-brain', 'ti ti-leaf', 'ti ti-pill', 'ti ti-clock', 'ti ti-hourglass',
+    'ti ti-apple', 'ti ti-salad', 'ti ti-carrot', 'ti ti-coffee', 'ti ti-tea', 'ti ti-beer', 'ti ti-glass', 'ti ti-cookie', 'ti ti-mug', 'ti ti-meat',
+    'ti ti-book', 'ti ti-pencil', 'ti ti-notebook', 'ti ti-code', 'ti ti-device-laptop', 'ti ti-terminal', 'ti ti-database', 'ti ti-calculator', 'ti ti-math-symbols', 'ti ti-briefcase', 'ti ti-chart-bar', 'ti ti-chart-line', 'ti ti-calendar', 'ti ti-bulb', 'ti ti-coin', 'ti ti-wallet', 'ti ti-piggy-bank',
+    'ti ti-home', 'ti ti-brush', 'ti ti-trash', 'ti ti-bucket', 'ti ti-shirt', 'ti ti-key', 'ti ti-package', 'ti ti-tools', 'ti ti-bath', 'ti ti-shower',
+    'ti ti-music', 'ti ti-headphones', 'ti ti-microphone', 'ti ti-guitar', 'ti ti-camera', 'ti ti-video', 'ti ti-device-gamepad-2', 'ti ti-movie', 'ti ti-palette', 'ti ti-photo', 'ti ti-ball-football', 'ti ti-ball-basketball', 'ti ti-ball-tennis', 'ti ti-trophy', 'ti ti-medal', 'ti ti-plane', 'ti ti-map-pin', 'ti ti-star', 'ti ti-flag', 'ti ti-target'
   ];
   
   if (gridEl) {
