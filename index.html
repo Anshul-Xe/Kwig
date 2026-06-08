@@ -79,7 +79,7 @@
       <button id="menu-btn" aria-label="Open sidebar menu" style="background:none; border:none; color:inherit; cursor:pointer; padding:6px 8px; margin-left:-8px; display:inline-flex; align-items:center; justify-content:center; outline:none; -webkit-tap-highlight-color:transparent;" onclick="window.openSidebar()">
         <i class="ti ti-menu-2" aria-hidden="true" style="font-size: 18px; transition: transform 0.2s;"></i>
       </button>
-      <span class="app-title-header" style="font-family: 'Nanum Pen Script', cursive; font-size: 26px; user-select:none; cursor:default; position: absolute; left: 50%; transform: translateX(-50%); color: var(--color-title-faded); letter-spacing: 0.05em; font-weight: 600;">Kwig</span>
+      <span class="app-title-header" onclick="window.goTo('home')" style="font-family: 'Nanum Pen Script', cursive; font-size: 26px; user-select:none; cursor:pointer; position: absolute; left: 50%; transform: translateX(-50%); color: var(--color-title-faded); letter-spacing: 0.05em; font-weight: 600;">Kwig</span>
       <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark mode" style="margin-right:-8px;">
         <i class="ti ti-moon" id="theme-icon" aria-hidden="true"></i>
       </button>
@@ -98,6 +98,20 @@
         <div class="modal-buttons">
           <button id="modal-cancel-btn" class="modal-btn modal-btn-cancel">Cancel</button>
           <button id="modal-confirm-btn" class="modal-btn modal-btn-delete">Yes, Remove</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Icon Selector Modal -->
+    <div id="icon-selector-modal" class="modal-overlay">
+      <div class="modal-card" style="width: 320px; max-width: 90%; padding: 20px;">
+        <div class="modal-title" id="icon-modal-title" style="font-family: var(--font-serif); font-size: 16px; margin-bottom: 8px;">Select Icon</div>
+        <div style="font-size: 11px; color: var(--color-text-tertiary); margin-bottom: 16px;">Choose a new icon for <span id="icon-modal-habit-name" style="font-weight: 600; color: var(--color-text-secondary);">Habit</span>:</div>
+        <div class="icon-grid" id="icon-modal-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; max-height: 200px; overflow-y: auto; padding-right: 4px; margin-bottom: 20px;">
+          <!-- preset icons will be rendered here dynamically -->
+        </div>
+        <div class="modal-buttons" style="margin-top: 0;">
+          <button id="icon-modal-close-btn" class="modal-btn modal-btn-cancel" style="width: 100%;" onclick="window.closeIconSelectorModal()">Close</button>
         </div>
       </div>
     </div>

@@ -1052,3 +1052,31 @@ input:checked + .slider-toggle:before {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Preset Icon Picker Grid item styling */
+.icon-grid-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  font-size: 20px;
+  color: var(--color-text-secondary);
+  border: 1.5px solid var(--color-border-secondary);
+  border-radius: 8px;
+  background-color: var(--color-background-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  outline: none;
+  padding: 0;
+}
+.icon-grid-item:hover, .icon-grid-item:focus {
+  border-color: var(--color-text-primary);
+  color: var(--color-text-primary);
+  background-color: var(--color-border-tertiary);
+  transform: scale(1.08);
+}
+.icon-grid-item.active {
+  border-color: var(--color-accent-green);
+  color: var(--color-accent-green);
+  background-color: rgba(37, 184, 148, 0.1);
+}
+

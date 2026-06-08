@@ -120,6 +120,7 @@ let S = {
   dbFilter: 'monthly',
   prodFormula: 'linear_algebra(2) + statistics(2) + python(2) + project(2) + book_reading(2) + fl_studio(2) + speaking(2)',
   healthFormula: 'water_meter(2) + conscious_meter(2) + water(2) + gym(2) + running(2) + food(2) + meditation(2)',
+  habitIcons: {},        // Habit custom icons
   notifiers: {
     water: { enabled: false, interval: 1 },
     walk: { enabled: false, interval: 1 }
@@ -254,6 +255,7 @@ async function loadAll() {
     "Consistency beats intensity."
   ]);
   S.username = await ld('kwig_username', 'Kwig User');
+  S.habitIcons = await ld('kwig_habit_icons', {});
   
   // Parse Google OAuth redirect hash if present
   if (window.location.hash.includes('access_token=')) {
@@ -474,6 +476,7 @@ async function loadDb() {
       
       if (totalCount > 0 || i === 0) {
         rows.push({
+          dateKey: dk,
           fd: `${DAYS[d.getDay()].slice(0, 3)}, ${sd(d)}`,
           isToday: i === 0,
           study: totals.study,
@@ -571,8 +574,14 @@ function renderHome() {
   const mHabits = (() => {
     const study = si().map(h => ({ ...h, type: 'prod', category: 'Study', icon: getHabitIcon(h.id, 'Study') }));
     const fun = fi().map(h => ({ ...h, type: 'prod', category: 'Fun', icon: getHabitIcon(h.id, 'Fun') }));
-    const health = hi().map(h => ({ ...h, type: 'health', category: 'Health', icon: getHabitIcon(h.id, 'Health') }));
-    return [...study, ...fun, ...health];
+    const healthList = hi().filter(h => h.id !== 'water').map(h => ({ ...h, type: 'health', category: 'Health', icon: getHabitIcon(h.id, 'Health') }));
+    
+    const specialHealth = [
+      { id: 'water_meter', label: 'Water Intake', type: 'health', category: 'Health', icon: getHabitIcon('water_meter', 'Health'), isDropdown: true, dropdownType: 'water' },
+      { id: 'conscious_meter', label: 'Consciousness', type: 'health', category: 'Health', icon: getHabitIcon('conscious_meter', 'Health'), isDropdown: true, dropdownType: 'conscious' }
+    ];
+    
+    return [...study, ...fun, ...specialHealth, ...healthList];
   })();
 
   const mDays = (() => {
@@ -602,6 +611,33 @@ function renderHome() {
     if (h.category === 'Health') color = 'var(--color-accent-green)';
     
     const cells = mDays.map(d => {
+      if (h.isDropdown) {
+        const hState = S.weeklyHabitStates[d.dateKey] && S.weeklyHabitStates[d.dateKey].health ? S.weeklyHabitStates[d.dateKey].health : {};
+        if (h.dropdownType === 'water') {
+          const wLvl = hState.water_level !== undefined ? hState.water_level : 1.0;
+          const options = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0].map(val => {
+            return `<option value="${val}" ${wLvl === val ? 'selected' : ''}>${val.toFixed(1)}L</option>`;
+          }).join('');
+          return `<td style="padding:4px 2px;text-align:center;vertical-align:middle">
+            <select onchange="window.changeWeeklyLevel('${d.dateKey}', 'water', this.value)" 
+                    style="font-size:10px;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:2px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans);outline:none;cursor:pointer;width:100%;max-width:48px;text-align:center">
+              ${options}
+            </select>
+          </td>`;
+        } else {
+          const cLvl = hState.conscious_level !== undefined ? hState.conscious_level : 4;
+          const options = [1, 2, 3, 4, 5, 6].map(val => {
+            return `<option value="${val}" ${cLvl === val ? 'selected' : ''}>${val}</option>`;
+          }).join('');
+          return `<td style="padding:4px 2px;text-align:center;vertical-align:middle">
+            <select onchange="window.changeWeeklyLevel('${d.dateKey}', 'conscious', this.value)" 
+                    style="font-size:10px;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:2px 4px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans);outline:none;cursor:pointer;width:100%;max-width:38px;text-align:center">
+              ${options}
+            </select>
+          </td>`;
+        }
+      }
+      
       const isCh = S.weeklyHabitStates[d.dateKey] && S.weeklyHabitStates[d.dateKey][h.type] && S.weeklyHabitStates[d.dateKey][h.type][h.id];
       return `<td style="padding:6px 4px;text-align:center;vertical-align:middle">
         <div onclick="window.togWeeklyHabit('${h.id}','${d.dateKey}','${h.type}')" 
@@ -617,7 +653,16 @@ function renderHome() {
     
     return `<tr style="border-bottom:0.5px solid var(--color-border-tertiary)">
       <td style="padding:6px 4px;text-align:center;vertical-align:middle">
-        <div style="font-size:20px;color:${color};display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary)" title="${h.label}">
+        <div onmousedown="window.handleHabitLogoPointerStart(event, '${h.id}', '${h.label.replace(/'/g, "\\'")}')"
+             onmousemove="window.handleHabitLogoPointerMove(event)"
+             onmouseup="window.handleHabitLogoPointerEnd()"
+             onmouseleave="window.handleHabitLogoPointerEnd()"
+             ontouchstart="window.handleHabitLogoPointerStart(event, '${h.id}', '${h.label.replace(/'/g, "\\'")}')"
+             ontouchmove="window.handleHabitLogoPointerMove(event)"
+             ontouchend="window.handleHabitLogoPointerEnd()"
+             onclick="window.handleHabitLogoClick(event, '${h.label.replace(/'/g, "\\'")}')"
+             style="font-size:20px;color:${color};display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);cursor:pointer;user-select:none;-webkit-user-select:none;" 
+             title="${h.label}">
           <i class="${h.icon}"></i>
         </div>
       </td>
@@ -949,7 +994,7 @@ function renderDb() {
     </div>`;
   }
   
-  const rows = S.db.map(d => `<tr class="dbr" style="${d.isToday ? 'background:var(--color-background-secondary);' : ''}">
+  const rows = S.db.map(d => `<tr class="dbr cr" data-del-type="db_row" data-del-id="${d.dateKey}" data-del-name="${d.fd}" style="${d.isToday ? 'background:var(--color-background-secondary);' : ''}">
     <td style="padding:11px 4px 11px 12px;font-size:12px;color:${d.isToday ? 'var(--color-text-primary)' : 'var(--color-text-secondary)'};font-weight:${d.isToday ? 600 : 400}">${d.fd}</td>
     <td style="padding:11px 4px;text-align:center"><span style="font-size:11px;font-weight:600;color:${pc(d.study)}">${d.study}%</span></td>
     <td style="padding:11px 4px;text-align:center"><span style="font-size:11px;font-weight:600;color:${pc(d.fun)}">${d.fun}%</span></td>
@@ -965,11 +1010,16 @@ function renderDb() {
     </button>
     <div style="display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px">
       <div style="font-size:24px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif)">Database</div>
-      <select onchange="window.changeDbFilter(this.value)" style="font-size:11px;border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:4px 6px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans);outline:none;cursor:pointer">
-        <option value="weekly" ${S.dbFilter === 'weekly' ? 'selected' : ''}>Weekly</option>
-        <option value="monthly" ${S.dbFilter === 'monthly' ? 'selected' : ''}>Monthly</option>
-        <option value="all" ${S.dbFilter === 'all' ? 'selected' : ''}>All</option>
-      </select>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button onclick="window.resetPreviousData()" style="font-size:11px;border:0.5px solid var(--color-accent-red);border-radius:6px;padding:4px 8px;background:transparent;color:var(--color-accent-red);font-family:var(--font-sans);cursor:pointer;display:inline-flex;align-items:center;gap:3px">
+          <i class="ti ti-trash-x" style="font-size:12px"></i> Reset All
+        </button>
+        <select onchange="window.changeDbFilter(this.value)" style="font-size:11px;border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:4px 6px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans);outline:none;cursor:pointer">
+          <option value="weekly" ${S.dbFilter === 'weekly' ? 'selected' : ''}>Weekly</option>
+          <option value="monthly" ${S.dbFilter === 'monthly' ? 'selected' : ''}>Monthly</option>
+          <option value="all" ${S.dbFilter === 'all' ? 'selected' : ''}>All</option>
+        </select>
+      </div>
     </div>
     <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:24px">${S.db.length} day${S.db.length !== 1 ? 's' : ''} shown &nbsp;&middot;&nbsp; ${filterDesc}</div>
     
@@ -1269,6 +1319,9 @@ window.togWeeklyHabit = async (habitId, dateKey, type) => {
 };
 
 function getHabitIcon(id, category) {
+  if (S.habitIcons && S.habitIcons[id]) {
+    return S.habitIcons[id];
+  }
   const mapping = {
     linear_algebra: 'ti ti-math-symbols',
     statistics: 'ti ti-chart-bar',
@@ -1281,7 +1334,9 @@ function getHabitIcon(id, category) {
     gym: 'ti ti-barbell',
     running: 'ti ti-run',
     food: 'ti ti-apple',
-    meditation: 'ti ti-brain'
+    meditation: 'ti ti-brain',
+    water_meter: 'ti ti-droplet',
+    conscious_meter: 'ti ti-brain'
   };
   if (mapping[id]) return mapping[id];
   if (category === 'Study') return 'ti ti-notebook';
@@ -1409,6 +1464,189 @@ window.updateConsciousSlider = val => {
   }
 };
 
+window.changeWeeklyLevel = async (dateKey, type, value) => {
+  const floatVal = parseFloat(value);
+  if (!S.weeklyHabitStates[dateKey]) {
+    S.weeklyHabitStates[dateKey] = { prod: {}, health: {} };
+  }
+  
+  if (type === 'water') {
+    S.weeklyHabitStates[dateKey].health.water_level = floatVal;
+    await sv(`health-${dateKey}`, S.weeklyHabitStates[dateKey].health);
+    if (dateKey === TK) {
+      S.hc.water_level = floatVal;
+      const el = document.getElementById('water-slider-value');
+      if (el) el.textContent = `${floatVal.toFixed(1)} L`;
+      const slider = document.querySelector('input[oninput*="updateWaterSlider"]');
+      if (slider) slider.value = floatVal;
+    }
+  } else if (type === 'conscious') {
+    const intVal = parseInt(value);
+    S.weeklyHabitStates[dateKey].health.conscious_level = intVal;
+    await sv(`health-${dateKey}`, S.weeklyHabitStates[dateKey].health);
+    if (dateKey === TK) {
+      S.hc.conscious_level = intVal;
+      const el = document.getElementById('conscious-slider-value');
+      if (el) {
+        const text = intVal <= 2 ? "Low 😴" : intVal <= 4 ? "Decent 🙂" : "High 🧠";
+        el.textContent = `${intVal} - ${text}`;
+        el.style.color = intVal <= 2 ? 'var(--color-accent-red)' : intVal <= 4 ? 'var(--color-accent-orange)' : 'var(--color-accent-green)';
+      }
+      const slider = document.querySelector('input[oninput*="updateConsciousSlider"]');
+      if (slider) slider.value = intVal;
+    }
+  }
+  
+  updWd();
+  render();
+};
+
+window.showHabitTooltip = (event, label) => {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  
+  const existing = document.querySelectorAll('.habit-tooltip');
+  existing.forEach(el => el.remove());
+  
+  const tooltip = document.createElement('div');
+  tooltip.className = 'habit-tooltip';
+  tooltip.textContent = label;
+  tooltip.style.cssText = `
+    position: absolute;
+    background: var(--color-text-primary);
+    color: var(--color-background-primary);
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -10px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  `;
+  
+  document.body.appendChild(tooltip);
+  
+  const rect = event.currentTarget.getBoundingClientRect();
+  const top = rect.top + window.scrollY - 30;
+  const left = rect.left + window.scrollX + rect.width / 2;
+  
+  tooltip.style.top = top + 'px';
+  tooltip.style.left = left + 'px';
+  
+  setTimeout(() => {
+    tooltip.style.opacity = '1';
+    tooltip.style.transform = 'translate(-50%, -5px)';
+  }, 10);
+  
+  setTimeout(() => {
+    tooltip.style.opacity = '0';
+    tooltip.style.transform = 'translate(-50%, -10px)';
+    setTimeout(() => tooltip.remove(), 150);
+  }, 1500);
+};
+
+let selectedHabitIdForIcon = null;
+let habitLogoHoldTimer = null;
+let habitLogoHoldTriggered = false;
+let hlStartX = 0, hlStartY = 0;
+
+window.handleHabitLogoPointerStart = (e, habitId, label) => {
+  habitLogoHoldTriggered = false;
+  const touch = e.touches ? e.touches[0] : e;
+  hlStartX = touch.clientX;
+  hlStartY = touch.clientY;
+  
+  if (habitLogoHoldTimer) clearTimeout(habitLogoHoldTimer);
+  habitLogoHoldTimer = setTimeout(() => {
+    habitLogoHoldTriggered = true;
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+    window.openIconSelectorModal(habitId, label);
+  }, 600);
+};
+
+window.handleHabitLogoPointerMove = (e) => {
+  if (!habitLogoHoldTimer) return;
+  const touch = e.touches ? e.touches[0] : e;
+  const diffX = Math.abs(touch.clientX - hlStartX);
+  const diffY = Math.abs(touch.clientY - hlStartY);
+  if (diffX > 10 || diffY > 10) {
+    window.handleHabitLogoPointerEnd();
+  }
+};
+
+window.handleHabitLogoPointerEnd = () => {
+  if (habitLogoHoldTimer) {
+    clearTimeout(habitLogoHoldTimer);
+    habitLogoHoldTimer = null;
+  }
+};
+
+window.handleHabitLogoClick = (e, label) => {
+  if (habitLogoHoldTriggered) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    habitLogoHoldTriggered = false;
+    return;
+  }
+  window.showHabitTooltip(e, label);
+};
+
+window.openIconSelectorModal = (habitId, label) => {
+  selectedHabitIdForIcon = habitId;
+  const modal = document.getElementById('icon-selector-modal');
+  const nameEl = document.getElementById('icon-modal-habit-name');
+  const gridEl = document.getElementById('icon-modal-grid');
+  
+  if (nameEl) nameEl.textContent = label;
+  
+  const currentIcon = getHabitIcon(habitId, '');
+  
+  const PRESET_ICONS = [
+    'ti ti-barbell', 'ti ti-run', 'ti ti-droplet', 'ti ti-brain', 'ti ti-heart', 'ti ti-leaf', 'ti ti-zzz', 'ti ti-apple', 'ti ti-pill', 'ti ti-bike',
+    'ti ti-book', 'ti ti-pencil', 'ti ti-code', 'ti ti-device-laptop', 'ti ti-math-symbols', 'ti ti-calculator', 'ti ti-briefcase', 'ti ti-chart-bar', 'ti ti-calendar', 'ti ti-bulb',
+    'ti ti-music', 'ti ti-headphones', 'ti ti-microphone', 'ti ti-camera', 'ti ti-device-gamepad-2', 'ti ti-coffee', 'ti ti-beer', 'ti ti-movie', 'ti ti-palette', 'ti ti-plane',
+    'ti ti-home', 'ti ti-star', 'ti ti-flag', 'ti ti-clock', 'ti ti-compass', 'ti ti-target', 'ti ti-check', 'ti ti-settings', 'ti ti-cloud', 'ti ti-lock'
+  ];
+  
+  if (gridEl) {
+    gridEl.innerHTML = PRESET_ICONS.map(ico => {
+      const isActive = currentIcon === ico;
+      return `<button class="icon-grid-item ${isActive ? 'active' : ''}" 
+                      onclick="window.changeHabitIcon('${habitId}', '${ico}')" 
+                      aria-label="Select icon ${ico}"
+                      title="${ico.replace('ti ti-', '').replace('-', ' ')}">
+        <i class="${ico}"></i>
+      </button>`;
+    }).join('');
+  }
+  
+  if (modal) modal.classList.add('active');
+};
+
+window.closeIconSelectorModal = () => {
+  const modal = document.getElementById('icon-selector-modal');
+  if (modal) modal.classList.remove('active');
+  selectedHabitIdForIcon = null;
+};
+
+window.changeHabitIcon = (habitId, newIcon) => {
+  if (!S.habitIcons) S.habitIcons = {};
+  S.habitIcons[habitId] = newIcon;
+  sv('kwig_habit_icons', S.habitIcons);
+  render();
+  window.closeIconSelectorModal();
+};
+
 // 7. Notifier Toggle / Value update functions
 window.toggleNotifier = async (type, checked) => {
   S.notifiers[type].enabled = checked;
@@ -1436,6 +1674,44 @@ window.changeDbFilter = async (val) => {
   render();
   await loadDb();
   render();
+};
+
+window.resetPreviousData = async () => {
+  if (!confirm("Are you sure you want to delete all historical logs and tasks except today's? This action cannot be undone.")) {
+    return;
+  }
+  
+  const datePattern = /^(prod|health|tasks)-(\d{4}-\d{1,2}-\d{1,2})$/;
+  const keysToRemove = [];
+  
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key) {
+      const match = key.match(datePattern);
+      if (match) {
+        const dateKey = match[2];
+        if (dateKey !== TK) {
+          keysToRemove.push(key);
+        }
+      }
+    }
+  }
+  
+  for (const k of keysToRemove) {
+    localStorage.removeItem(k);
+  }
+  
+  // Clear weekly state cache for previous days
+  const todayState = S.weeklyHabitStates[TK] || { prod: {}, health: {} };
+  S.weeklyHabitStates = {};
+  S.weeklyHabitStates[TK] = todayState;
+  
+  // Reload and refresh
+  S.db = null;
+  render();
+  await loadDb();
+  render();
+  alert("All historical logs deleted successfully!");
 };
 
 window.saveConsoleWeights = async (type, val) => {
@@ -2303,7 +2579,7 @@ document.getElementById('modal-cancel-btn').addEventListener('click', () => {
   closeDeleteModal();
 });
 
-document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+document.getElementById('modal-confirm-btn').addEventListener('click', async () => {
   if (pendingDelete) {
     const { type, id, sec } = pendingDelete;
     
@@ -2331,6 +2607,19 @@ document.getElementById('modal-confirm-btn').addEventListener('click', () => {
         const key = sec === 'study' ? 'cs' : sec === 'fun' ? 'cf' : 'ch';
         sv(key, arr);
       }
+    } else if (type === 'db_row') {
+      localStorage.removeItem(`prod-${id}`);
+      localStorage.removeItem(`health-${id}`);
+      localStorage.removeItem(`tasks-${id}`);
+      if (S.weeklyHabitStates[id]) {
+        S.weeklyHabitStates[id] = { prod: {}, health: {} };
+      }
+      if (id === TK) {
+        S.pc = {};
+        S.hc = {};
+        S.tasks = [];
+      }
+      await loadDb();
     }
     
     updWd();
