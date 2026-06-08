@@ -29,30 +29,39 @@ if (!window.storage) {
 const themeToggleBtn = document.getElementById('theme-toggle');
 const themeIcon = document.getElementById('theme-icon');
 
-function updateThemeUI(isDark) {
-  if (isDark) {
-    document.documentElement.classList.add('dark');
-    themeIcon.className = 'ti ti-sun';
-  } else {
-    document.documentElement.classList.remove('dark');
-    themeIcon.className = 'ti ti-moon';
+function updateThemeUI(theme) {
+  document.documentElement.classList.remove('theme-coffee');
+  let iconName = 'ti-moon';
+  let title = 'Default Dark';
+  if (theme === 'coffee') {
+    document.documentElement.classList.add('theme-coffee');
+    iconName = 'ti-coffee';
+    title = 'Coffee';
+  }
+  if (themeIcon) {
+    themeIcon.className = `ti ${iconName}`;
+  }
+  if (themeToggleBtn) {
+    themeToggleBtn.setAttribute('title', `Theme: ${title}`);
+    themeToggleBtn.setAttribute('aria-label', `Theme: ${title}`);
   }
 }
 
 // Initialize theme
 (async () => {
-  const savedTheme = localStorage.getItem('app-theme');
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const isDark = savedTheme ? savedTheme === 'dark' : prefersDark;
-  updateThemeUI(isDark);
+  const savedTheme = localStorage.getItem('app-theme') || 'dark';
+  // Fallback if savedTheme was retroma
+  const actualTheme = savedTheme === 'retroma' ? 'dark' : savedTheme;
+  updateThemeUI(actualTheme);
 })();
 
 // Add toggle click handler
 themeToggleBtn.addEventListener('click', () => {
-  const isCurrentlyDark = document.documentElement.classList.contains('dark');
-  const newDarkState = !isCurrentlyDark;
-  localStorage.setItem('app-theme', newDarkState ? 'dark' : 'light');
-  updateThemeUI(newDarkState);
+  if (navigator.vibrate) navigator.vibrate(50);
+  const currentTheme = localStorage.getItem('app-theme') || 'dark';
+  const nextTheme = (currentTheme === 'coffee') ? 'dark' : 'coffee';
+  localStorage.setItem('app-theme', nextTheme);
+  updateThemeUI(nextTheme);
 });
 
 // 3. Main Application Code
@@ -124,7 +133,11 @@ let S = {
   notifiers: {
     water: { enabled: false, interval: 1 },
     walk: { enabled: false, interval: 1 }
-  }
+  },
+  workout: {},
+  workout_cycle_start: null,
+  calendar_year: null,
+  calendar_month: null
 };
 
 // Calculate thought of the day index based on year progress
@@ -230,6 +243,8 @@ async function loadAll() {
   S.deleted_defaults = await ld('deleted_defaults', []);
   S.sidebarExpanded = await ld('sidebarExpanded', false);
   S.gdriveClientId = await ld('gdrive_client_id', '910899479357-oeqhpsg705kspesph1m6q10411r1h25o.apps.googleusercontent.com');
+  S.workout = await ld('kwig_workout_data', {});
+  S.workout_cycle_start = await ld('kwig_workout_cycle_start', null);
   
   // Load weekly habit states
   const days = [];
@@ -256,6 +271,9 @@ async function loadAll() {
   ]);
   S.username = await ld('kwig_username', 'Kwig User');
   S.habitIcons = await ld('kwig_habit_icons', {});
+  S.folders = await ld('kwig_folders', []);
+  S.expandedFolders = await ld('kwig_expanded_folders', {});
+
   
   // Parse Google OAuth redirect hash if present
   if (window.location.hash.includes('access_token=')) {
@@ -532,14 +550,14 @@ function shdr(title, fn, mt) {
 
 function irow(item, chk, type, isCus, sec) {
   const col = chk ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)', dec = chk ? 'line-through' : 'none';
-  return `<div class="cr" onclick="togI('${item.id}','${type}')" 
+  return `<div class="cr" id="habit-row-${item.id}" onclick="togI('${item.id}','${type}')" 
     data-del-type="habit" 
     data-del-id="${item.id}" 
     data-del-sec="${sec}" 
     data-del-name="${item.label}"
     style="display:flex;align-items:center;gap:8px;padding:12px 0;border-bottom:0.5px solid var(--color-border-tertiary)">
     <span style="flex:1;font-size:15px;color:${col};text-decoration:${dec};transition:all 0.2s">${item.label}</span>
-    ${cbx(chk)}
+    <div>${cbx(chk)}</div>
   </div>`;
 }
 
@@ -616,7 +634,9 @@ function renderHome() {
         if (h.dropdownType === 'water') {
           const hasWater = hState.water_level !== undefined && hState.water_level !== null;
           const wLvl = hState.water_level;
-          const display = hasWater ? (wLvl % 1 === 0 ? wLvl.toFixed(0) + 'L' : wLvl.toFixed(1) + 'L') : 'v';
+          const display = hasWater 
+            ? `${wLvl % 1 === 0 ? wLvl.toFixed(0) + 'L' : wLvl.toFixed(1) + 'L'}&nbsp;<i class="ti ti-chevron-down" style="font-size:8px; opacity:0.5"></i>` 
+            : `<i class="ti ti-chevron-down" style="font-size:10px; opacity:0.6"></i>`;
           return `<td style="padding:4px 2px;text-align:center;vertical-align:middle">
             <div id="wm-drop-${d.dateKey}-water" 
                  onclick="window.openWeeklyLevelDropdown(event, '${d.dateKey}', 'water')" 
@@ -629,7 +649,9 @@ function renderHome() {
         } else {
           const hasConscious = hState.conscious_level !== undefined && hState.conscious_level !== null;
           const cLvl = hState.conscious_level;
-          const display = hasConscious ? cLvl : 'v';
+          const display = hasConscious 
+            ? `${cLvl}&nbsp;<i class="ti ti-chevron-down" style="font-size:8px; opacity:0.5"></i>` 
+            : `<i class="ti ti-chevron-down" style="font-size:10px; opacity:0.6"></i>`;
           return `<td style="padding:4px 2px;text-align:center;vertical-align:middle">
             <div id="wm-drop-${d.dateKey}-conscious" 
                  onclick="window.openWeeklyLevelDropdown(event, '${d.dateKey}', 'conscious')" 
@@ -708,21 +730,7 @@ function renderHome() {
     </div>`;
   }).join('');
 
-  const tForm = S.as === 'task' ? `<div style="padding:12px;border-top:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary);border-radius:var(--border-radius-md);margin-top:8px">
-    <input id="ni-task" type="text" placeholder="Task name..." style="width:100%;font-size:14px;border:none;background:transparent;color:var(--color-text-primary);margin-bottom:8px;font-family:var(--font-sans);box-sizing:border-box" onkeydown="if(event.key==='Enter')confT();if(event.key==='Escape')cancelA()">
-    <div style="display:flex;align-items:center;gap:7px">
-      <select id="ni-pri" style="font-size:12px;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:4px 6px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans);cursor:pointer">
-        <option>High</option>
-        <option selected>Medium</option>
-        <option>Low</option>
-      </select>
-      <input id="ni-dl" type="date" style="flex:1;font-size:12px;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:4px 6px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans)">
-      <button onclick="cancelA()" style="background:none;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:4px 8px;font-size:12px;color:var(--color-text-secondary);cursor:pointer;font-family:var(--font-sans)">Cancel</button>
-      <button onclick="confT()" style="background:var(--color-text-primary);border:none;border-radius:4px;padding:4px 10px;font-size:12px;color:var(--color-background-primary);cursor:pointer;font-family:var(--font-sans);font-weight:500">Add</button>
-    </div>
-  </div>` : '';
-
-  const tEmpty = S.tasks.length === 0 && S.as !== 'task' ? `<div style="padding:16px 12px;font-size:13px;color:var(--color-text-tertiary);text-align:center">No tasks — add one above</div>` : '';
+  const tEmpty = `<div id="task-list-empty" style="padding:16px 12px;font-size:13px;color:var(--color-text-tertiary);text-align:center;${S.tasks.length === 0 ? '' : 'display:none;'}">No tasks — add one above</div>`;
   
   let wk = '';
   if (!S.wd) {
@@ -751,6 +759,40 @@ function renderHome() {
       <i class="ti ti-arrow-up-right" style="font-size:12px;color:var(--color-text-tertiary)" aria-hidden="true"></i>
     </div>`;
   }
+
+  // The Void Folders grid under Matrix
+  const folders = S.folders || [];
+  const foldersGrid = folders.map(f => {
+    const fPages = S.pages.filter(p => p.folderId === f.id);
+    return `
+      <div onclick="goTo('notes')" class="tap" 
+           style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-md); padding:12px 14px; display:flex; flex-direction:column; gap:6px; cursor:pointer; box-shadow:0 2px 6px var(--color-shadow); transition:transform 0.15s ease, box-shadow 0.15s ease;"
+           onmouseover="this.style.transform='translateY(-2px)';"
+           onmouseout="this.style.transform='none';">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <i class="ti ti-folder" style="font-size:20px; color:var(--color-accent-blue)"></i>
+          <span style="font-size:13px; font-weight:600; color:var(--color-text-primary); text-overflow:ellipsis; white-space:nowrap; overflow:hidden;">${f.name}</span>
+        </div>
+        <div style="font-size:11px; color:var(--color-text-tertiary);">${fPages.length} note${fPages.length !== 1 ? 's' : ''}</div>
+      </div>
+    `;
+  }).join('');
+  
+  const foldersEmpty = folders.length === 0 
+    ? `<div style="padding:16px; text-align:center; font-size:12px; color:var(--color-text-tertiary); font-style:italic; background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-md);">No folders created. Add folders in The Void!</div>`
+    : `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:10px;">${foldersGrid}</div>`;
+
+  const voidFoldersHtml = `
+    <div class="f4" style="margin-bottom:24px">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px">
+        <span style="font-size:10px; font-weight:600; color:var(--color-text-tertiary); letter-spacing:0.09em; text-transform:uppercase">The Void Folders</span>
+        <button onclick="goTo('notes')" style="background:none; border:none; cursor:pointer; font-size:11px; color:var(--color-text-secondary); font-family:var(--font-sans); padding:0; display:inline-flex; align-items:center; gap:3px">
+          Manage <i class="ti ti-arrow-up-right" style="font-size:12px"></i>
+        </button>
+      </div>
+      ${foldersEmpty}
+    </div>
+  `;
 
   // Notifiers UI Component
   const wEn = S.notifiers.water.enabled, wInt = S.notifiers.water.interval;
@@ -823,10 +865,10 @@ function renderHome() {
          ontouchmove="window.handlePrinciplePointerMove(event)"
          ontouchend="window.handlePrinciplePointerEnd()"
          onclick="window.handlePrincipleClick(event)"
-         style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-left:3px solid var(--color-text-primary);border-radius:0 8px 8px 0;padding:14px 16px 12px;margin-bottom:24px;cursor:pointer;user-select:none;-webkit-user-select:none;">
-      <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px">Principle of the day</div>
-      <div id="tt" style="font-size:14px;color:var(--color-text-primary);font-family:var(--font-serif);font-style:italic;line-height:1.65;margin-bottom:10px">&ldquo;${displayPrinciple}&rdquo;</div>
-      <div id="th" style="font-size:11px;color:var(--color-text-tertiary);text-align:right">${fraction}</div>
+         style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-left:3px solid var(--color-text-primary);border-radius:0 8px 8px 0;padding:14px 16px 12px;margin-bottom:24px;cursor:pointer;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;outline:none;-webkit-tap-highlight-color:transparent;">
+      <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;">Principle of the day</div>
+      <div id="tt" style="font-size:14px;color:var(--color-text-primary);font-family:var(--font-serif);font-style:italic;line-height:1.65;margin-bottom:10px;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;">&ldquo;${displayPrinciple}&rdquo;</div>
+      <div id="th" style="font-size:11px;color:var(--color-text-tertiary);text-align:right;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;">${fraction}</div>
     </div>
     
     <div class="f3">
@@ -862,18 +904,24 @@ function renderHome() {
           <span style="width:52px;flex-shrink:0;font-size:10px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.07em;text-align:center">Deadline</span>
           <span style="width:18px;flex-shrink:0"></span>
         </div>
-        ${tRows}${tEmpty}${tForm}
+        <div id="task-list-container">
+          ${tRows}${tEmpty}
+        </div>
       </div>
     </div>
     
     <!-- Weekly Habit Grid Matrix -->
     ${matrixHtml}
     
+    <!-- The Void Folders Grid -->
+    ${voidFoldersHtml}
+    
     <!-- Reminders / Notifiers -->
     ${notifierHtml}
     
   </div>`;
 }
+
 
 function renderProd() {
   const sIds = new Set(SB.map(x => x.id)), fIds = new Set(FB.map(x => x.id));
@@ -903,13 +951,13 @@ function renderProd() {
     <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:28px">${DS}</div>
     
     ${shdr('Study', "addR('study')")}
-    <div style="border-top:0.5px solid var(--color-border-tertiary);margin-bottom:28px">
-      ${sR}${S.as === 'study' ? aiform('study') : ''}
+    <div id="study-list-container" style="border-top:0.5px solid var(--color-border-tertiary);margin-bottom:28px">
+      ${sR}
     </div>
     
     ${shdr('Fun', "addR('fun')", '28px')}
-    <div style="border-top:0.5px solid var(--color-border-tertiary)">
-      ${fR}${S.as === 'fun' ? aiform('fun') : ''}
+    <div id="fun-list-container" style="border-top:0.5px solid var(--color-border-tertiary)">
+      ${fR}
     </div>
     ${consoleHtml}
   </div>`;
@@ -980,8 +1028,8 @@ function renderHealth() {
     <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:28px">${DS}</div>
     
     ${shdr('Daily habits', "addR('health')")}
-    <div style="border-top:0.5px solid var(--color-border-tertiary)">
-      ${hR}${S.as === 'health' ? aiform('health') : ''}
+    <div id="health-list-container" style="border-top:0.5px solid var(--color-border-tertiary)">
+      ${hR}
     </div>
     
     <!-- Water Intake Scale -->
@@ -1031,7 +1079,7 @@ function renderDb() {
         </select>
       </div>
     </div>
-    <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:24px">${S.db.length} day${S.db.length !== 1 ? 's' : ''} shown &nbsp;&middot;&nbsp; ${filterDesc}</div>
+    <div id="db-desc-text" style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:24px">${S.db.length} day${S.db.length !== 1 ? 's' : ''} shown &nbsp;&middot;&nbsp; ${filterDesc}</div>
     
     <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;box-shadow: 0 2px 8px var(--color-shadow)">
       <table style="width:100%;border-collapse:collapse;table-layout:fixed">
@@ -1051,7 +1099,7 @@ function renderDb() {
             <th style="padding:10px 12px 10px 4px;font-size:10px;font-weight:600;color:var(--color-text-tertiary);text-align:center;text-transform:uppercase;letter-spacing:0.07em">Tasks</th>
           </tr>
         </thead>
-        <tbody>${rows}</tbody>
+        <tbody id="db-tbody">${rows}</tbody>
       </table>
     </div>
   </div>`;
@@ -1059,40 +1107,114 @@ function renderDb() {
 
 // "The Void" - Notes Manager Page
 function renderNotes() {
-  const rows = S.pages.map(p => `
-    <tr class="notes-tr" onclick="window.openPage('${p.id}')">
-      <td class="notes-td notes-td-title">
-        <i class="ti ti-file-text" aria-hidden="true"></i>
+  const folders = S.folders || [];
+  const pages = S.pages || [];
+  
+  // Render each folder block
+  const folderHtmlList = folders.map(f => {
+    const fPages = pages.filter(p => p.folderId === f.id);
+    const pageRows = fPages.map(p => `
+      <div class="notes-tr" style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:0.5px solid var(--color-border-tertiary); cursor:pointer;" onclick="window.openPage('${p.id}')">
+        <div style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--color-text-primary)">
+          <i class="ti ti-file-text" style="color:var(--color-text-secondary); font-size:15px;"></i>
+          <span>${p.name || 'Untitled'}</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:11px; color:var(--color-text-tertiary);">${p.date}</span>
+          <button class="notes-delete-btn" style="background:none; border:none; color:var(--color-accent-red); cursor:pointer; padding:4px;" onclick="event.stopPropagation(); window.confirmDeletePage('${p.id}', '${p.name.replace(/'/g, "\\'")}')" aria-label="Delete note">
+            <i class="ti ti-trash"></i>
+          </button>
+        </div>
+      </div>
+    `).join('');
+    
+    const pagesEmpty = fPages.length === 0 
+      ? `<div style="padding:16px; text-align:center; font-size:12px; color:var(--color-text-tertiary); font-style:italic;">Empty folder</div>` 
+      : pageRows;
+
+    return `
+      <div id="notes-folder-block-${f.id}" style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding: 12px 14px; margin-bottom: 16px; box-shadow: 0 2px 8px var(--color-shadow)">
+
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="ti ti-folder" style="font-size: 20px; color: var(--color-accent-blue);"></i>
+            <span style="font-size: 15px; font-weight: 600; color: var(--color-text-primary);">${f.name}</span>
+            <span style="font-size: 11px; color: var(--color-text-tertiary);">(${fPages.length})</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button class="add-btn" style="padding: 4px 8px; font-size: 11px;" onclick="window.createNewPage('${f.id}')">+ New Page</button>
+            <button style="background:none; border:none; color:var(--color-accent-red); cursor:pointer; padding:4px; display:inline-flex; align-items:center;" onclick="window.deleteFolder('${f.id}')" title="Delete Folder">
+              <i class="ti ti-trash" style="font-size:16px;"></i>
+            </button>
+          </div>
+        </div>
+        <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); overflow:hidden;">
+          ${pagesEmpty}
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  // Render root pages block
+  const rootPages = pages.filter(p => !p.folderId);
+  const rootPageRows = rootPages.map(p => `
+    <div class="notes-tr" style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:0.5px solid var(--color-border-tertiary); cursor:pointer;" onclick="window.openPage('${p.id}')">
+      <div style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--color-text-primary)">
+        <i class="ti ti-file-text" style="color:var(--color-text-secondary); font-size:15px;"></i>
         <span>${p.name || 'Untitled'}</span>
-      </td>
-      <td class="notes-td notes-td-date">${p.date}</td>
-      <td class="notes-td" style="text-align: right; width: 60px;" onclick="event.stopPropagation();">
-        <button class="notes-delete-btn" onclick="window.confirmDeletePage('${p.id}', '${p.name.replace(/'/g, "\\'")}')" aria-label="Delete note">
-          <i class="ti ti-trash" aria-hidden="true"></i>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:11px; color:var(--color-text-tertiary);">${p.date}</span>
+        <button class="notes-delete-btn" style="background:none; border:none; color:var(--color-accent-red); cursor:pointer; padding:4px;" onclick="event.stopPropagation(); window.confirmDeletePage('${p.id}', '${p.name.replace(/'/g, "\\'")}')" aria-label="Delete note">
+          <i class="ti ti-trash"></i>
         </button>
-      </td>
-    </tr>
+      </div>
+    </div>
   `).join('');
   
-  const empty = S.pages.length === 0 ? `
-    <div style="padding:48px 0; text-align:center; color:var(--color-text-tertiary);">
-      <i class="ti ti-notebook" style="font-size: 32px; margin-bottom: 12px; display:block;" aria-hidden="true"></i>
-      <div style="font-size: 14px; font-weight: 500;">No notes found</div>
-      <div style="font-size: 11px; margin-top: 4px;">Click the button below to add your first page</div>
+  const rootEmpty = rootPages.length === 0 
+    ? `<div style="padding:16px; text-align:center; font-size:12px; color:var(--color-text-tertiary); font-style:italic;">No root-level pages</div>` 
+    : rootPageRows;
+    
+  const rootHtml = `
+    <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding: 12px 14px; box-shadow: 0 2px 8px var(--color-shadow); margin-bottom:16px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <i class="ti ti-file-text" style="font-size: 18px; color: var(--color-text-secondary);"></i>
+          <span style="font-size: 15px; font-weight: 600; color: var(--color-text-primary);">Root Pages</span>
+          <span style="font-size: 11px; color: var(--color-text-tertiary);">(${rootPages.length})</span>
+        </div>
+        <button class="add-btn" style="padding: 4px 8px; font-size: 11px;" onclick="window.createNewPage(null)">+ New Page</button>
+      </div>
+      <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); overflow:hidden;">
+        ${rootEmpty}
+      </div>
     </div>
-  ` : `<table class="notes-table"><tbody>${rows}</tbody></table>`;
+  `;
   
+  const emptyBlock = `<div id="notes-empty-message" style="padding:48px 0; text-align:center; color:var(--color-text-tertiary); background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); box-shadow:0 2px 8px var(--color-shadow); ${(folders.length === 0 && pages.length === 0) ? '' : 'display:none;'}">
+    <i class="ti ti-notebook" style="font-size: 32px; margin-bottom: 12px; display:block;" aria-hidden="true"></i>
+    <div style="font-size: 14px; font-weight: 500;">No folders or pages found</div>
+    <div style="font-size: 11px; margin-top: 4px;">Click the buttons below to create your directory structure</div>
+  </div>`;
+
   return `<div class="pg" style="padding:20px 0 20px">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 24px;">
       <div>
         <div style="font-size:24px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif)">The Void</div>
         <div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px;">Your personal thought canvas</div>
       </div>
-      <button class="add-btn" onclick="window.createNewPage()">+ New Page</button>
+      <div style="display:flex; gap: 8px;">
+        <button class="add-btn" onclick="window.createFolder()">+ Add Folder</button>
+        <button class="add-btn" onclick="window.createNewPage()">+ New Page</button>
+      </div>
     </div>
     
-    <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding: 8px 12px; box-shadow: 0 2px 8px var(--color-shadow)">
-      ${empty}
+    <div id="notes-list-wrapper">
+      ${emptyBlock}
+      <div id="notes-items-container">
+        ${folderHtmlList}${rootHtml}
+      </div>
     </div>
   </div>`;
 }
@@ -1171,6 +1293,8 @@ function render() {
   if (S.page === 'home') document.getElementById('sb-home')?.classList.add('active');
   else if (S.page === 'database') document.getElementById('sb-db')?.classList.add('active');
   else if (S.page === 'notes' || S.page === 'editor') document.getElementById('sb-void-mgr')?.classList.add('active');
+  else if (S.page === 'workout' || S.page === 'workout_db') document.getElementById('sb-workout')?.classList.add('active');
+  else if (S.page === 'calendar') document.getElementById('sb-calendar')?.classList.add('active');
   
   if (S.page === 'home') app.innerHTML = renderHome();
   else if (S.page === 'productivity') app.innerHTML = renderProd();
@@ -1179,6 +1303,9 @@ function render() {
   else if (S.page === 'notes') app.innerHTML = renderNotes();
   else if (S.page === 'editor') app.innerHTML = renderEditor();
   else if (S.page === 'principles') app.innerHTML = renderPrinciples();
+  else if (S.page === 'workout') app.innerHTML = renderWorkout();
+  else if (S.page === 'workout_db') app.innerHTML = renderWorkoutDb();
+  else if (S.page === 'calendar') app.innerHTML = renderCalendar();
 }
 
 window.updatePrinciple = (idx, val) => {
@@ -1208,9 +1335,16 @@ window.handlePrinciplePointerStart = (e) => {
   pStartX = touch.clientX;
   pStartY = touch.clientY;
   
+  if (window.getSelection) {
+    window.getSelection().removeAllRanges();
+  }
+  
   if (principleHoldTimer) clearTimeout(principleHoldTimer);
   principleHoldTimer = setTimeout(() => {
     principleHoldTriggered = true;
+    if (window.getSelection) {
+      window.getSelection().removeAllRanges();
+    }
     if (navigator.vibrate) {
       navigator.vibrate(50);
     }
@@ -1236,6 +1370,9 @@ window.handlePrinciplePointerEnd = () => {
 };
 
 window.handlePrincipleClick = (e) => {
+  if (window.getSelection) {
+    window.getSelection().removeAllRanges();
+  }
   if (principleHoldTriggered) {
     if (e) {
       e.preventDefault();
@@ -1309,15 +1446,28 @@ window.nxt = () => {
 };
 
 window.togI = (id, type) => {
+  const isCh = type === 'prod' ? !S.pc[id] : !S.hc[id];
   if (type === 'prod') {
-    S.pc[id] = !S.pc[id];
+    S.pc[id] = isCh;
     sv(`prod-${TK}`, S.pc);
   } else {
-    S.hc[id] = !S.hc[id];
+    S.hc[id] = isCh;
     sv(`health-${TK}`, S.hc);
   }
   updWd();
-  render();
+  
+  const rowEl = document.getElementById(`habit-row-${id}`);
+  if (rowEl) {
+    const textEl = rowEl.children[0];
+    const checkboxEl = rowEl.children[1];
+    if (textEl && checkboxEl) {
+      textEl.style.color = isCh ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)';
+      textEl.style.textDecoration = isCh ? 'line-through' : 'none';
+      checkboxEl.innerHTML = cbx(isCh);
+    }
+  } else {
+    render();
+  }
 };
 
 window.togWeeklyHabit = async (habitId, dateKey, type) => {
@@ -1437,17 +1587,88 @@ window.cycP = id => {
 };
 
 window.addR = sec => {
-  S.as = sec;
-  render();
-  setTimeout(() => {
-    const el = document.getElementById(sec === 'task' ? 'ni-task' : `ni-${sec}`);
-    if (el) el.focus();
-  }, 60);
+  if (sec === 'task') {
+    if (document.getElementById('ni-task-container')) {
+      const el = document.getElementById('ni-task');
+      if (el) el.focus();
+      return;
+    }
+    const tEmptyEl = document.getElementById('task-list-empty');
+    if (tEmptyEl) {
+      tEmptyEl.style.display = 'none';
+    }
+    const formDiv = document.createElement('div');
+    formDiv.id = 'ni-task-container';
+    formDiv.style.cssText = "padding:12px;border-top:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary);border-radius:var(--border-radius-md);margin-top:8px";
+    formDiv.innerHTML = `
+      <input id="ni-task" type="text" placeholder="Task name..." style="width:100%;font-size:14px;border:none;background:transparent;color:var(--color-text-primary);margin-bottom:8px;font-family:var(--font-sans);box-sizing:border-box" onkeydown="if(event.key==='Enter')window.confT();if(event.key==='Escape')window.cancelTaskForm()">
+      <div style="display:flex;align-items:center;gap:7px">
+        <select id="ni-pri" style="font-size:12px;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:4px 6px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans);cursor:pointer">
+          <option>High</option>
+          <option selected>Medium</option>
+          <option>Low</option>
+        </select>
+        <input id="ni-dl" type="date" style="flex:1;font-size:12px;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:4px 6px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans)">
+        <button onclick="window.cancelTaskForm()" style="background:none;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:4px 8px;font-size:12px;color:var(--color-text-secondary);cursor:pointer;font-family:var(--font-sans)">Cancel</button>
+        <button onclick="window.confT()" style="background:var(--color-text-primary);border:none;border-radius:4px;padding:4px 10px;font-size:12px;color:var(--color-background-primary);cursor:pointer;font-family:var(--font-sans);font-weight:500">Add</button>
+      </div>
+    `;
+    const container = document.getElementById('task-list-container');
+    if (container) {
+      container.appendChild(formDiv);
+    }
+    setTimeout(() => {
+      const el = document.getElementById('ni-task');
+      if (el) el.focus();
+    }, 60);
+  } else {
+    if (document.getElementById(`ni-${sec}-container`)) {
+      const el = document.getElementById(`ni-${sec}`);
+      if (el) el.focus();
+      return;
+    }
+    const formDiv = document.createElement('div');
+    formDiv.id = `ni-${sec}-container`;
+    formDiv.style.cssText = "display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:0.5px solid var(--color-border-tertiary)";
+    formDiv.innerHTML = `
+      <input id="ni-${sec}" type="text" placeholder="Add item..." style="flex:1;font-size:14px;border:none;background:transparent;color:var(--color-text-primary);font-family:var(--font-sans)" onkeydown="if(event.key==='Enter')window.confI('${sec}');if(event.key==='Escape')window.cancelHabitForm('${sec}')">
+      <button onclick="window.confI('${sec}')" style="background:var(--color-text-primary);border:none;border-radius:4px;padding:4px 10px;font-size:12px;color:var(--color-background-primary);cursor:pointer;font-family:var(--font-sans);font-weight:500">Add</button>
+      <button onclick="window.cancelHabitForm('${sec}')" style="background:none;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:4px 8px;font-size:12px;color:var(--color-text-secondary);cursor:pointer;font-family:var(--font-sans)">×</button>
+    `;
+    const container = document.getElementById(`${sec}-list-container`);
+    if (container) {
+      container.appendChild(formDiv);
+    }
+    setTimeout(() => {
+      const el = document.getElementById(`ni-${sec}`);
+      if (el) el.focus();
+    }, 60);
+  }
+};
+
+window.cancelTaskForm = () => {
+  const formDiv = document.getElementById('ni-task-container');
+  if (formDiv) formDiv.remove();
+  if (!S.tasks || S.tasks.length === 0) {
+    const tEmptyEl = document.getElementById('task-list-empty');
+    if (tEmptyEl) {
+      tEmptyEl.style.display = 'block';
+    }
+  }
+};
+
+window.cancelHabitForm = sec => {
+  const formDiv = document.getElementById(`ni-${sec}-container`);
+  if (formDiv) formDiv.remove();
 };
 
 window.cancelA = () => {
+  window.cancelTaskForm();
+  window.cancelHabitForm('study');
+  window.cancelHabitForm('fun');
+  window.cancelHabitForm('health');
+  window.cancelFolderForm();
   S.as = null;
-  render();
 };
 
 window.confI = sec => {
@@ -1600,11 +1821,15 @@ window.changeWeeklyLevel = async (dateKey, type, value) => {
   const dropEl = document.getElementById(`wm-drop-${dateKey}-${type}`);
   if (dropEl) {
     if (type === 'water') {
-      const display = floatVal !== null ? (floatVal % 1 === 0 ? floatVal.toFixed(0) + 'L' : floatVal.toFixed(1) + 'L') : 'v';
-      dropEl.textContent = display;
+      const display = floatVal !== null 
+        ? `${floatVal % 1 === 0 ? floatVal.toFixed(0) + 'L' : floatVal.toFixed(1) + 'L'}&nbsp;<i class="ti ti-chevron-down" style="font-size:8px; opacity:0.5"></i>` 
+        : `<i class="ti ti-chevron-down" style="font-size:10px; opacity:0.6"></i>`;
+      dropEl.innerHTML = display;
     } else {
-      const display = intVal !== null ? intVal : 'v';
-      dropEl.textContent = display;
+      const display = intVal !== null 
+        ? `${intVal}&nbsp;<i class="ti ti-chevron-down" style="font-size:8px; opacity:0.5"></i>` 
+        : `<i class="ti ti-chevron-down" style="font-size:10px; opacity:0.6"></i>`;
+      dropEl.innerHTML = display;
     }
   }
   
@@ -1661,7 +1886,7 @@ window.openWeeklyLevelDropdown = (event, dateKey, type) => {
                  style="padding: 6px 8px; font-size: 11px; font-weight: 600; text-align: center; cursor: pointer; color: ${isNoneSelected ? 'var(--color-accent-green)' : 'var(--color-text-tertiary)'}; background: ${isNoneSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}; transition: background 0.1s;"
                  onmouseover="this.style.background='var(--color-background-secondary)'"
                  onmouseout="this.style.background='${isNoneSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}'">
-      v
+      <i class="ti ti-chevron-down" style="font-size:10px; opacity:0.6"></i>
     </div>`;
     
     options = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0].map(val => {
@@ -1682,7 +1907,7 @@ window.openWeeklyLevelDropdown = (event, dateKey, type) => {
                  style="padding: 6px 8px; font-size: 11px; font-weight: 600; text-align: center; cursor: pointer; color: ${isNoneSelected ? 'var(--color-accent-green)' : 'var(--color-text-tertiary)'}; background: ${isNoneSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}; transition: background 0.1s;"
                  onmouseover="this.style.background='var(--color-background-secondary)'"
                  onmouseout="this.style.background='${isNoneSelected ? 'rgba(37, 184, 148, 0.08)' : 'transparent'}'">
-      v
+      <i class="ti ti-chevron-down" style="font-size:10px; opacity:0.6"></i>
     </div>`;
     
     options = [1, 2, 3, 4, 5, 6].map(val => {
@@ -1907,48 +2132,73 @@ window.changeNotifierInterval = (type, val) => {
 window.changeDbFilter = async (val) => {
   S.dbFilter = val;
   await sv('db_filter', val);
+  
+  const tbody = document.getElementById('db-tbody');
+  if (tbody) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary);font-size:13px">Loading history...</td></tr>`;
+  }
+  
   S.db = null;
-  render();
   await loadDb();
-  render();
+  
+  if (tbody && S.db) {
+    tbody.innerHTML = S.db.map(d => `<tr class="dbr cr" data-del-type="db_row" data-del-id="${d.dateKey}" data-del-name="${d.fd}" style="${d.isToday ? 'background:var(--color-background-secondary);' : ''}">
+      <td style="padding:11px 4px 11px 12px;font-size:12px;color:${d.isToday ? 'var(--color-text-primary)' : 'var(--color-text-secondary)'};font-weight:${d.isToday ? 600 : 400}">${d.fd}</td>
+      <td style="padding:11px 4px;text-align:center"><span style="font-size:11px;font-weight:600;color:${pc(d.study)}">${d.study}%</span></td>
+      <td style="padding:11px 4px;text-align:center"><span style="font-size:11px;font-weight:600;color:${pc(d.fun)}">${d.fun}%</span></td>
+      <td style="padding:11px 4px;text-align:center"><span style="font-size:11px;font-weight:600;color:${pc(d.health)}">${d.health}%</span></td>
+      <td style="padding:11px 12px 11px 4px;text-align:center;font-size:11px;color:var(--color-text-secondary)">${d.tTotal > 0 ? d.tDone + '/' + d.tTotal : '—'}</td>
+    </tr>`).join('');
+    
+    const filterDesc = S.dbFilter === 'weekly' ? 'last 7 days' : S.dbFilter === 'monthly' ? 'last 30 days' : 'all time';
+    const descEl = document.getElementById('db-desc-text');
+    if (descEl) {
+      descEl.innerHTML = `${S.db.length} day${S.db.length !== 1 ? 's' : ''} shown &nbsp;&middot;&nbsp; ${filterDesc}`;
+    }
+  } else {
+    render();
+  }
 };
 
-window.resetPreviousData = async () => {
-  if (!confirm("Are you sure you want to delete all historical logs and tasks except today's? This action cannot be undone.")) {
-    return;
-  }
-  
-  const datePattern = /^(prod|health|tasks)-(\d{4}-\d{1,2}-\d{1,2})$/;
-  const keysToRemove = [];
-  
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key) {
-      const match = key.match(datePattern);
-      if (match) {
-        const dateKey = match[2];
-        if (dateKey !== TK) {
-          keysToRemove.push(key);
+window.resetPreviousData = () => {
+  window.showCustomConfirm(
+    "Reset history?",
+    "Are you sure you want to delete all historical logs and tasks except today's? This action cannot be undone.",
+    "Yes, Reset",
+    async () => {
+      const datePattern = /^(prod|health|tasks)-(\d{4}-\d{1,2}-\d{1,2})$/;
+      const keysToRemove = [];
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) {
+          const match = key.match(datePattern);
+          if (match) {
+            const dateKey = match[2];
+            if (dateKey !== TK) {
+              keysToRemove.push(key);
+            }
+          }
         }
       }
+      
+      for (const k of keysToRemove) {
+        localStorage.removeItem(k);
+      }
+      
+      // Clear weekly state cache for previous days
+      const todayState = S.weeklyHabitStates[TK] || { prod: {}, health: {} };
+      S.weeklyHabitStates = {};
+      S.weeklyHabitStates[TK] = todayState;
+      
+      // Reload and refresh
+      S.db = null;
+      render();
+      await loadDb();
+      render();
+      alert("All historical logs deleted successfully!");
     }
-  }
-  
-  for (const k of keysToRemove) {
-    localStorage.removeItem(k);
-  }
-  
-  // Clear weekly state cache for previous days
-  const todayState = S.weeklyHabitStates[TK] || { prod: {}, health: {} };
-  S.weeklyHabitStates = {};
-  S.weeklyHabitStates[TK] = todayState;
-  
-  // Reload and refresh
-  S.db = null;
-  render();
-  await loadDb();
-  render();
-  alert("All historical logs deleted successfully!");
+  );
 };
 
 window.saveConsoleWeights = async (type, val) => {
@@ -1961,20 +2211,44 @@ window.saveConsoleWeights = async (type, val) => {
   }
   await loadWd();
   await loadDb();
-  render();
 };
 
 window.editUsername = () => {
-  const newName = prompt("Enter new username:", S.username || "Kwig User");
-  if (newName !== null) {
-    const trimmed = newName.trim();
-    if (trimmed) {
-      S.username = trimmed;
-      sv('kwig_username', S.username);
-      const el = document.getElementById('username-display');
-      if (el) el.textContent = trimmed;
-    }
+  const displayContainer = document.getElementById('username-display')?.parentNode;
+  if (!displayContainer) return;
+  
+  const currentName = S.username || "Kwig User";
+  displayContainer.innerHTML = `
+    <input id="username-input" type="text" value="${currentName}" 
+           style="width: 100%; font-size: 13px; font-weight: 600; border: none; border-bottom: 0.5px solid var(--color-text-primary); background: transparent; color: var(--color-text-primary); outline: none; padding: 2px 0; font-family: var(--font-sans);"
+           onkeydown="if(event.key==='Enter')window.saveUsername(this.value);if(event.key==='Escape')window.cancelUsernameEdit();"
+           onblur="window.saveUsername(this.value)">
+  `;
+  setTimeout(() => {
+    const inp = document.getElementById('username-input');
+    if (inp) inp.focus();
+  }, 50);
+};
+
+window.saveUsername = (val) => {
+  const trimmed = val.trim();
+  if (trimmed) {
+    S.username = trimmed;
+    sv('kwig_username', S.username);
   }
+  window.cancelUsernameEdit();
+};
+
+window.cancelUsernameEdit = () => {
+  const displayContainer = document.getElementById('username-input')?.parentNode;
+  if (!displayContainer) return;
+  const currentName = S.username || "Kwig User";
+  displayContainer.innerHTML = `
+    <span class="profile-name" id="username-display" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:110px; font-size:14px; font-weight:600;">${currentName}</span>
+    <button onclick="event.stopPropagation(); window.editUsername();" style="background:none; border:none; color:var(--color-text-tertiary); cursor:pointer; padding:4px 0 4px 6px; display:inline-flex; align-items:center; outline:none; -webkit-tap-highlight-color:transparent;" title="Edit Username">
+      <i class="ti ti-edit" style="font-size:13px;"></i>
+    </button>
+  `;
 };
 
 // 8. Sidebar & Drive Alert functions
@@ -2001,14 +2275,45 @@ function renderSidebarPages() {
   const listEl = document.getElementById('sidebar-pages-list');
   if (!listEl) return;
   
-  // Render sublist contents (CSS manages expand/collapse height animations)
-  listEl.innerHTML = S.pages.map(p => {
+  const folders = S.folders || [];
+  const pages = S.pages || [];
+  if (!S.expandedFolders) S.expandedFolders = {};
+  
+  // Render folders and pages under folders
+  const foldersHtml = folders.map(f => {
+    const isExpanded = !!S.expandedFolders[f.id];
+    const fPages = pages.filter(p => p.folderId === f.id);
+    const pagesHtml = isExpanded ? fPages.map(p => {
+      const isActive = S.page === 'editor' && S.activePageId === p.id;
+      return `<a href="#" class="sidebar-page-item ${isActive ? 'active' : ''}" style="padding-left:18px; border-left: 0.5px solid var(--color-border-tertiary);" onclick="event.preventDefault(); window.openPage('${p.id}'); window.closeSidebar();">
+        <i class="ti ti-file-text" aria-hidden="true"></i><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.name || 'Untitled'}</span>
+      </a>`;
+    }).join('') : '';
+    
+    return `<div style="display:flex; flex-direction:column; gap:2px; margin-bottom:4px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding: 4px 6px; font-size:12px; color:var(--color-text-secondary); cursor:pointer; border-radius:4px; transition: background-color 0.15s;" onmouseover="this.style.background='var(--color-background-secondary)'" onmouseout="this.style.background='transparent'">
+        <div style="display:flex; align-items:center; gap:6px; flex:1; min-width:0;" onclick="window.toggleSidebarFolder('${f.id}')">
+          <i class="ti ${isExpanded ? 'ti-folder-open' : 'ti-folder'}" style="color:var(--color-accent-blue); font-size:13px;"></i>
+          <span style="font-weight:600; text-overflow:ellipsis; white-space:nowrap; overflow:hidden; max-width:110px;">${f.name}</span>
+        </div>
+        <button onclick="event.stopPropagation(); window.createNewPage('${f.id}');" style="background:none; border:none; color:var(--color-text-tertiary); cursor:pointer; padding:2px 4px; display:inline-flex; align-items:center; outline:none;" title="New note in folder">+</button>
+      </div>
+      ${pagesHtml}
+    </div>`;
+  }).join('');
+  
+  // Render root pages
+  const rootPages = pages.filter(p => !p.folderId);
+  const rootPagesHtml = rootPages.map(p => {
     const isActive = S.page === 'editor' && S.activePageId === p.id;
     return `<a href="#" class="sidebar-page-item ${isActive ? 'active' : ''}" onclick="event.preventDefault(); window.openPage('${p.id}'); window.closeSidebar();">
-      <i class="ti ti-file-text" aria-hidden="true"></i><span>${p.name || 'Untitled'}</span>
+      <i class="ti ti-file-text" aria-hidden="true"></i><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.name || 'Untitled'}</span>
     </a>`;
   }).join('');
+  
+  listEl.innerHTML = `${foldersHtml}${rootPagesHtml}`;
 }
+
 
 window.toggleSidebarPages = () => {
   S.sidebarExpanded = !S.sidebarExpanded;
@@ -2145,14 +2450,19 @@ document.getElementById('import-backup-file').addEventListener('change', e => {
       }
       
       const count = Object.keys(backupData.localStorage).length;
-      if (confirm(`Valid backup file found.\n\nThis will restore ${count} records and overwrite all current app data. Are you sure you want to proceed?`)) {
-        localStorage.clear();
-        for (const [k, v] of Object.entries(backupData.localStorage)) {
-          localStorage.setItem(k, v);
+      window.showCustomConfirm(
+        "Restore backup?",
+        `Valid backup file found.\n\nThis will restore ${count} records and overwrite all current app data. Are you sure you want to proceed?`,
+        "Yes, Restore",
+        () => {
+          localStorage.clear();
+          for (const [k, v] of Object.entries(backupData.localStorage)) {
+            localStorage.setItem(k, v);
+          }
+          alert("Backup successfully restored! App will now reload.");
+          window.location.reload();
         }
-        alert("Backup successfully restored! App will now reload.");
-        window.location.reload();
-      }
+      );
     } catch (err) {
       alert("Restore failed: " + err.message);
     }
@@ -2332,14 +2642,19 @@ window.syncFromGoogleDrive = async () => {
     const count = Object.keys(backupData.localStorage).length;
     const dateStr = new Date(backupData.timestamp || Date.now()).toLocaleString();
     
-    if (confirm(`Backup found from: ${dateStr}\n\nThis will restore ${count} keys and overwrite all current habits, logs, and notes on this device. Do you want to proceed?`)) {
-      localStorage.clear();
-      for (const [key, val] of Object.entries(backupData.localStorage)) {
-        localStorage.setItem(key, val);
+    window.showCustomConfirm(
+      "Restore backup?",
+      `Backup found from: ${dateStr}\n\nThis will restore ${count} keys and overwrite all current habits, logs, and notes on this device. Do you want to proceed?`,
+      "Yes, Restore",
+      () => {
+        localStorage.clear();
+        for (const [key, val] of Object.entries(backupData.localStorage)) {
+          localStorage.setItem(key, val);
+        }
+        alert("Data successfully restored from Google Drive! Restarting application...");
+        window.location.reload();
       }
-      alert("Data successfully restored from Google Drive! Restarting application...");
-      window.location.reload();
-    }
+    );
   } catch (err) {
     console.error("Cloud download sync error:", err);
     let extraTip = "";
@@ -2354,7 +2669,7 @@ window.syncFromGoogleDrive = async () => {
 };
 
 // 9. Notes Page Manager State functions
-window.createNewPage = () => {
+window.createNewPage = (folderId = null) => {
   const newId = uid();
   const formatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
   const dateString = new Date().toLocaleDateString('en-US', formatOptions);
@@ -2363,7 +2678,8 @@ window.createNewPage = () => {
     id: newId,
     name: "Untitled",
     date: dateString,
-    content: ""
+    content: "",
+    folderId: folderId
   };
   
   S.pages.unshift(newPage);
@@ -2371,7 +2687,108 @@ window.createNewPage = () => {
   
   window.openPage(newId);
   window.closeSidebar();
+  renderSidebarPages();
 };
+
+window.createFolder = () => {
+  if (document.getElementById('ni-folder-container')) {
+    const el = document.getElementById('ni-folder');
+    if (el) el.focus();
+    return;
+  }
+  const emptyMsg = document.getElementById('notes-empty-message');
+  if (emptyMsg) emptyMsg.style.display = 'none';
+  const formDiv = document.createElement('div');
+  formDiv.id = 'ni-folder-container';
+  formDiv.style.cssText = "background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding: 12px 14px; margin-bottom: 16px; box-shadow: 0 2px 8px var(--color-shadow); display:flex; align-items:center; gap:8px;";
+  formDiv.innerHTML = `
+    <i class="ti ti-folder" style="font-size: 20px; color: var(--color-accent-blue);"></i>
+    <input id="ni-folder" type="text" placeholder="Folder name..." style="flex:1; font-size:14px; border:none; background:transparent; color:var(--color-text-primary); font-family:var(--font-sans); outline:none;" onkeydown="if(event.key==='Enter')window.confFolder();if(event.key==='Escape')window.cancelFolderForm()">
+    <button onclick="window.confFolder()" style="background:var(--color-text-primary); border:none; border-radius:4px; padding:4px 10px; font-size:12px; color:var(--color-background-primary); cursor:pointer; font-family:var(--font-sans); font-weight:500">Add</button>
+    <button onclick="window.cancelFolderForm()" style="background:none; border:0.5px solid var(--color-border-secondary); border-radius:4px; padding:4px 8px; font-size:12px; color:var(--color-text-secondary); cursor:pointer; font-family:var(--font-sans)">×</button>
+  `;
+  const wrapper = document.getElementById('notes-list-wrapper');
+  if (wrapper) {
+    wrapper.insertBefore(formDiv, wrapper.firstChild);
+  }
+  setTimeout(() => {
+    const el = document.getElementById('ni-folder');
+    if (el) el.focus();
+  }, 60);
+};
+
+window.cancelFolderForm = () => {
+  const formDiv = document.getElementById('ni-folder-container');
+  if (formDiv) formDiv.remove();
+  if ((!S.folders || S.folders.length === 0) && (!S.pages || S.pages.filter(p => !p.folderId).length === 0)) {
+    const emptyMsg = document.getElementById('notes-empty-message');
+    if (emptyMsg) emptyMsg.style.display = 'block';
+  }
+};
+
+window.confFolder = () => {
+  const el = document.getElementById('ni-folder');
+  if (!el) return;
+  const name = el.value.trim();
+  if (!name) {
+    window.cancelFolderForm();
+    return;
+  }
+  const newFolder = {
+    id: uid(),
+    name: name
+  };
+  if (!S.folders) S.folders = [];
+  S.folders.push(newFolder);
+  sv('kwig_folders', S.folders);
+  S.as = null;
+  render();
+  renderSidebarPages();
+};
+
+window.deleteFolder = (folderId) => {
+  const folder = S.folders.find(f => f.id === folderId);
+  if (!folder) return;
+  
+  window.showCustomConfirm(
+    "Delete Folder?",
+    `Are you sure you want to delete the folder "${folder.name}" and all notes inside it?`,
+    "Yes, Delete",
+    () => {
+      S.folders = S.folders.filter(f => f.id !== folderId);
+      S.pages = S.pages.filter(p => p.folderId !== folderId);
+      sv('kwig_folders', S.folders);
+      sv('kwig_pages', S.pages);
+      render();
+      renderSidebarPages();
+    }
+  );
+};
+
+window.toggleSidebarFolder = (folderId) => {
+  if (!S.expandedFolders) S.expandedFolders = {};
+  S.expandedFolders[folderId] = !S.expandedFolders[folderId];
+  sv('kwig_expanded_folders', S.expandedFolders);
+  renderSidebarPages();
+};
+
+window.goToFolder = (folderId) => {
+  S.page = 'notes';
+  render();
+  setTimeout(() => {
+    const el = document.getElementById(`notes-folder-block-${folderId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.outline = '1.5px solid var(--color-accent-blue)';
+      setTimeout(() => {
+        el.style.transition = 'outline 0.5s ease';
+        el.style.outline = '1.5px solid transparent';
+      }, 1500);
+    }
+  }, 100);
+};
+
+
 
 window.openPage = id => {
   if (S.page !== 'editor') {
@@ -2707,6 +3124,7 @@ let holdTimer = null;
 let holdTarget = null;
 let holdTriggered = false;
 let pendingDelete = null;
+let customConfirmCallback = null;
 let startX = 0, startY = 0;
 
 function handlePointerStart(e, targetRow) {
@@ -2754,12 +3172,41 @@ function showDeleteModal(type, id, sec, name) {
   }
 }
 
+window.showCustomConfirm = (title, desc, confirmBtnText, onConfirm) => {
+  customConfirmCallback = onConfirm;
+  const modal = document.getElementById('delete-modal');
+  if (modal) {
+    const titleEl = modal.querySelector('.modal-title');
+    const descEl = modal.querySelector('.modal-desc');
+    const confirmBtn = document.getElementById('modal-confirm-btn');
+    if (titleEl) titleEl.textContent = title;
+    if (descEl) descEl.textContent = desc;
+    if (confirmBtn) {
+      confirmBtn.textContent = confirmBtnText;
+      confirmBtn.className = confirmBtnText.toLowerCase().includes('delete') || confirmBtnText.toLowerCase().includes('remove') || confirmBtnText.toLowerCase().includes('reset') ? 'modal-btn modal-btn-delete' : 'modal-btn modal-btn-confirm';
+    }
+    modal.classList.add('active');
+  }
+};
+
 function closeDeleteModal() {
   const modal = document.getElementById('delete-modal');
   if (modal) {
     modal.classList.remove('active');
+    setTimeout(() => {
+      const titleEl = modal.querySelector('.modal-title');
+      const descEl = modal.querySelector('.modal-desc');
+      const confirmBtn = document.getElementById('modal-confirm-btn');
+      if (titleEl) titleEl.textContent = 'Remove row?';
+      if (descEl) descEl.textContent = 'Are you sure you want to delete this item? This action cannot be undone.';
+      if (confirmBtn) {
+        confirmBtn.textContent = 'Yes, Remove';
+        confirmBtn.className = 'modal-btn modal-btn-delete';
+      }
+    }, 200);
   }
   pendingDelete = null;
+  customConfirmCallback = null;
 }
 
 // Attach global event listeners to block short clicks when long-press was triggered
@@ -2817,6 +3264,14 @@ document.getElementById('modal-cancel-btn').addEventListener('click', () => {
 });
 
 document.getElementById('modal-confirm-btn').addEventListener('click', async () => {
+  if (customConfirmCallback) {
+    const cb = customConfirmCallback;
+    customConfirmCallback = null;
+    closeDeleteModal();
+    await cb();
+    return;
+  }
+  
   if (pendingDelete) {
     const { type, id, sec } = pendingDelete;
     
@@ -2953,6 +3408,617 @@ document.addEventListener('touchend', e => {
   swipeStartX = null;
   swipeStartY = null;
 }, true);
+
+// 6. Workout Tracker & Database Logic
+const ALL_EXERCISES = [
+  { name: "Bench Press", category: "CHEST", days: ["Mon", "Fri"] },
+  { name: "Chest Fly", category: "CHEST", days: ["Mon"] },
+  { name: "Push-up", category: "CHEST", days: ["Mon", "Fri"] },
+  { name: "Seated DB Press", category: "SHOULDER", days: ["Mon"] },
+  { name: "Standing Shoulder Press", category: "SHOULDER", days: ["Mon", "Fri"] },
+  { name: "Lateral Raise", category: "SHOULDER", days: ["Mon"] },
+  { name: "Front Raise", category: "SHOULDER", days: ["Mon"] },
+  { name: "Upright row", category: "SHOULDER", days: ["Mon"] },
+  { name: "Cable Face Pull", category: "SHOULDER", days: ["Tue"] },
+  { name: "Rope Extension", category: "TRICEP", days: ["Mon"] },
+  { name: "Tricep Dip", category: "TRICEP", days: ["Mon"] },
+  { name: "One-Arm Extension", category: "TRICEP", days: ["Mon"] },
+  { name: "Bench Dip", category: "TRICEP", days: ["Fri"] },
+  { name: "Diamond Push-up", category: "TRICEP", days: ["Mon"] },
+  { name: "Pull-up", category: "BACK", days: ["Tue"] },
+  { name: "Wide-grip pull", category: "BACK", days: ["Tue"] },
+  { name: "Barbell Row", category: "BACK", days: ["Tue", "Fri"] },
+  { name: "Dumble Row", category: "BACK", days: ["Tue"] },
+  { name: "Seated Row", category: "BACK", days: ["Tue"] },
+  { name: "Hyper Extension", category: "BACK", days: ["Tue", "Sat"] },
+  { name: "EZ bar curl", category: "BICEP", days: ["Tue"] },
+  { name: "Dumbbell Curl", category: "BICEP", days: ["Tue"] },
+  { name: "Hammer Curl", category: "BICEP", days: ["Tue"] },
+  { name: "Barbell Squat", category: "LEGS", days: ["Wed"] },
+  { name: "Romanian Deadlift", category: "LEGS", days: ["Wed"] },
+  { name: "Leg Press", category: "LEGS", days: ["Wed", "Fri"] },
+  { name: "Leg Curl", category: "LEGS", days: ["Wed"] },
+  { name: "Hip Abductor", category: "LEGS", days: ["Wed"] },
+  { name: "Calf Extension", category: "LEGS", days: ["Wed"] },
+  { name: "Plank", category: "CORE", days: ["Wed"] },
+  { name: "Hanging Leg Raise", category: "CORE", days: ["Wed"] },
+  { name: "Crunches", category: "CORE", days: ["Wed"] },
+  { name: "Treadmill", category: "CARDIO", days: ["Thu", "Fri", "Sat"] },
+  { name: "Cycling", category: "CARDIO", days: ["Thu", "Sat"] },
+  { name: "Walking Elliptical", category: "CARDIO", days: ["Thu", "Sat"] }
+];
+
+const WORKOUT_ROUTINES = {
+  "Mon": "Push",
+  "Tue": "Pull",
+  "Wed": "Legs, Core",
+  "Thu": "Cardio",
+  "Fri": "Full, Hit",
+  "Sat": "Active",
+  "Sun": "Rest"
+};
+
+const DB_DATES = [
+  30, 31, 1, 2, 3, 4, 5,
+  6, 7, 8, 9, 10, 11, 12,
+  13, 14, 15, 16, 17, 18, 19,
+  20, 21, 22, 23, 24, 25, 26,
+  27, 28, 29, 30, 1, 2, 3
+];
+const DB_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function getMondayOfCurrentWeek(d) {
+  const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = local.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  local.setDate(local.getDate() + diff);
+  return local;
+}
+
+function getLocalDateString(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(str) {
+  const parts = str.split('-');
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+  return new Date(year, month, day);
+}
+
+function getWorkoutColIdx() {
+  if (!S.workout_cycle_start) {
+    const monday = getMondayOfCurrentWeek(new Date());
+    S.workout_cycle_start = getLocalDateString(monday);
+    sv('kwig_workout_cycle_start', S.workout_cycle_start);
+  } else {
+    // Validate stored cycle start date and correct if it is not a Monday
+    const start = parseLocalDate(S.workout_cycle_start);
+    if (start.getDay() !== 1) { // 1 is Monday
+      const monday = getMondayOfCurrentWeek(start);
+      S.workout_cycle_start = getLocalDateString(monday);
+      sv('kwig_workout_cycle_start', S.workout_cycle_start);
+    }
+  }
+  
+  const start = parseLocalDate(S.workout_cycle_start);
+  const today = new Date();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  
+  const diffTime = todayMidnight.getTime() - start.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0 || diffDays >= 35) {
+    const monday = getMondayOfCurrentWeek(new Date());
+    S.workout_cycle_start = getLocalDateString(monday);
+    sv('kwig_workout_cycle_start', S.workout_cycle_start);
+    return getWorkoutColIdx();
+  }
+  
+  return diffDays + 1;
+}
+
+function getColumnCheckCount(colKey) {
+  let count = 0;
+  for (const ex of ALL_EXERCISES) {
+    if (S.workout[colKey] && S.workout[colKey][ex.name]) {
+      count++;
+    }
+  }
+  return count;
+}
+
+function getCategoryColorStyle(category) {
+  const colors = {
+    "CHEST": { bg: "rgba(231, 76, 60, 0.12)", fg: "#e74c3c" },
+    "SHOULDER": { bg: "rgba(230, 126, 34, 0.12)", fg: "#e67e22" },
+    "TRICEP": { bg: "rgba(155, 89, 182, 0.12)", fg: "#9b59b6" },
+    "BACK": { bg: "rgba(52, 152, 219, 0.12)", fg: "#3498db" },
+    "BICEP": { bg: "rgba(244, 143, 177, 0.18)", fg: "#f48fb1" },
+    "LEGS": { bg: "rgba(46, 204, 113, 0.12)", fg: "#2ecc71" },
+    "CORE": { bg: "rgba(241, 196, 15, 0.12)", fg: "#f1c40f" },
+    "CARDIO": { bg: "rgba(26, 188, 156, 0.12)", fg: "#1abc9c" }
+  };
+  const c = colors[category] || { bg: "var(--color-background-secondary)", fg: "var(--color-text-secondary)" };
+  return `background: ${c.bg}; color: ${c.fg}; border: 0.5px solid ${c.fg}33;`;
+}
+
+function getCategoryDbHeaderStyle(category) {
+  const colors = {
+    "CHEST": { bg: "linear-gradient(90deg, rgba(231,76,60,0.15) 0%, rgba(231,76,60,0.02) 100%)", fg: "#e74c3c", border: "#e74c3c" },
+    "SHOULDER": { bg: "linear-gradient(90deg, rgba(230,126,34,0.15) 0%, rgba(230,126,34,0.02) 100%)", fg: "#e67e22", border: "#e67e22" },
+    "TRICEP": { bg: "linear-gradient(90deg, rgba(155,89,182,0.15) 0%, rgba(155,89,182,0.02) 100%)", fg: "#9b59b6", border: "#9b59b6" },
+    "BACK": { bg: "linear-gradient(90deg, rgba(52,152,219,0.15) 0%, rgba(52,152,219,0.02) 100%)", fg: "#3498db", border: "#3498db" },
+    "BICEP": { bg: "linear-gradient(90deg, rgba(244,143,177,0.2) 0%, rgba(244,143,177,0.04) 100%)", fg: "#f48fb1", border: "#f48fb1" },
+    "LEGS": { bg: "linear-gradient(90deg, rgba(46,204,113,0.15) 0%, rgba(46,204,113,0.02) 100%)", fg: "#2ecc71", border: "#2ecc71" },
+    "CORE": { bg: "linear-gradient(90deg, rgba(241,196,15,0.15) 0%, rgba(241,196,15,0.02) 100%)", fg: "#f1c40f", border: "#f1c40f" },
+    "CARDIO": { bg: "linear-gradient(90deg, rgba(26,188,156,0.15) 0%, rgba(26,188,156,0.02) 100%)", fg: "#1abc9c", border: "#1abc9c" }
+  };
+  const c = colors[category] || { bg: "var(--color-background-secondary)", fg: "var(--color-text-secondary)", border: "var(--color-border-secondary)" };
+  return `background: ${c.bg}; color: ${c.fg}; border-left: 4px solid ${c.border}; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;`;
+}
+
+function renderWorkout() {
+  const activeColIdx = getWorkoutColIdx();
+  const activeW = Math.floor((activeColIdx - 1) / 7) + 1;
+  const activeDIdx = (activeColIdx - 1) % 7;
+  const activeD = DB_DAYS[activeDIdx];
+  const colKey = `col-${activeColIdx}`;
+
+  const isSkipped = S.workout[colKey] && S.workout[colKey]["skipped_gym"];
+  const walkingDist = S.workout[colKey] && S.workout[colKey]["walking_dist"] || "";
+
+  // Exercises List for current day
+  const dayExs = ALL_EXERCISES.filter(ex => ex.days.includes(activeD));
+  let exercisesHtml = "";
+
+  if (activeD === "Sun" || dayExs.length === 0) {
+    exercisesHtml = `
+      <div style="padding:40px 20px; text-align:center; color:var(--color-text-tertiary)">
+        <i class="ti ti-massage" style="font-size:36px; display:block; margin-bottom:12px; color:var(--color-accent-orange)"></i>
+        <div style="font-size:15px; font-weight:600; color:var(--color-text-primary);">Rest Day</div>
+        <div style="font-size:12px; margin-top:4px;">No workouts scheduled today. Recovery is part of progress!</div>
+      </div>
+    `;
+  } else if (isSkipped) {
+    exercisesHtml = `
+      <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:32px 20px; text-align:center; box-shadow: 0 2px 8px var(--color-shadow);">
+        <i class="ti ti-walk" style="font-size:36px; display:block; margin-bottom:12px; color:var(--color-accent-blue)"></i>
+        <div style="font-size:15px; font-weight:600; color:var(--color-text-primary);">Gym Skipped Today</div>
+        <div style="font-size:12px; margin-top:4px; color:var(--color-text-tertiary);">Walking Logged: ${walkingDist || 'None'}</div>
+      </div>
+    `;
+  } else {
+    const rowsHtml = dayExs.map(ex => {
+      const isChecked = S.workout[colKey] && S.workout[colKey][ex.name];
+      const idSafe = ex.name.replace(/\s+/g, '_');
+      return `
+        <div class="workout-exercise-row" id="workout-row-${idSafe}" onclick="window.toggleWorkoutExercise('${ex.name.replace(/'/g, "\\'")}')">
+          <span class="workout-cat-badge" style="${getCategoryColorStyle(ex.category)}">${ex.category}</span>
+          <span class="workout-ex-name" style="flex:1; font-size:14px; font-weight:500; color:${isChecked ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)'}; text-decoration:${isChecked ? 'line-through' : 'none'}; transition:all 0.15s ease;">${ex.name}</span>
+          <div class="workout-cbx-container">${cbx(isChecked)}</div>
+        </div>
+      `;
+    }).join('');
+
+    exercisesHtml = `
+      <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); overflow:hidden; box-shadow: 0 2px 8px var(--color-shadow);">
+        ${rowsHtml}
+      </div>
+    `;
+  }
+
+  const routineName = WORKOUT_ROUTINES[activeD];
+  const dateFormatted = `${activeD}, ${DS}`;
+
+  const skippedGymSection = `
+    <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:12px 14px; margin-bottom:20px; box-shadow: 0 2px 8px var(--color-shadow);">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <i class="ti ti-ban" style="font-size:18px; color:var(--color-accent-red);"></i>
+          <span style="font-size:13px; font-weight:500; color:var(--color-text-primary);">Skipped Gym</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="skip-gym-toggle" ${isSkipped ? 'checked' : ''} onchange="window.toggleSkipGym(this.checked)">
+          <span class="slider-toggle"></span>
+        </label>
+      </div>
+      
+      <div id="walking-dist-container" style="margin-top:12px; border-top:0.5px solid var(--color-border-tertiary); padding-top:12px; display:${isSkipped ? 'flex' : 'none'}; align-items:center; justify-content:space-between;">
+        <span style="font-size:13px; color:var(--color-text-secondary);">Walking distance:</span>
+        <select id="walking-dist-select" onchange="window.changeWalkingDist(this.value)" style="font-size:12px; border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:4px 8px; background:var(--color-background-primary); color:var(--color-text-primary); font-family:var(--font-sans); outline:none; cursor:pointer;">
+          <option value="" ${walkingDist === '' ? 'selected' : ''}>None</option>
+          <option value="1 km" ${walkingDist === '1 km' ? 'selected' : ''}>1 km</option>
+          <option value="2 km" ${walkingDist === '2 km' ? 'selected' : ''}>2 km</option>
+          <option value="3 km" ${walkingDist === '3 km' ? 'selected' : ''}>3 km</option>
+          <option value="4 km" ${walkingDist === '4 km' ? 'selected' : ''}>4 km</option>
+          <option value="5 km" ${walkingDist === '5 km' ? 'selected' : ''}>5 km</option>
+        </select>
+      </div>
+    </div>
+  `;
+
+  return `<div class="pg" style="padding:20px 0 20px">
+    <button class="back-btn" onclick="goTo('home')">
+      <i class="ti ti-arrow-left" style="font-size:15px" aria-hidden="true"></i>Back
+    </button>
+    <div style="font-size:24px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif);margin:18px 0 4px">Workout</div>
+    <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:20px">${dateFormatted} &nbsp;&middot;&nbsp; Week ${activeW} of 5</div>
+    
+    <div style="background:var(--color-background-secondary); border:0.5px solid var(--color-border-tertiary); border-left:3px solid var(--color-text-primary); border-radius:0 8px 8px 0; padding:12px 14px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-size:9px; font-weight:600; color:var(--color-text-tertiary); letter-spacing:0.09em; text-transform:uppercase; margin-bottom:2px;">Routine</div>
+        <div style="font-size:15px; font-weight:600; color:var(--color-text-primary); font-family:var(--font-serif);">${routineName}</div>
+      </div>
+      <span style="font-size:9px; font-weight:700; background:var(--color-accent-green); color:#fff; padding:2px 6px; border-radius:4px;">ACTIVE TODAY</span>
+    </div>
+
+    ${skippedGymSection}
+    ${exercisesHtml}
+
+    <button class="workout-db-btn" onclick="goTo('workout_db')">
+      <i class="ti ti-database"></i> Open Workout Database
+    </button>
+  </div>`;
+}
+
+function renderWorkoutDb() {
+  let headerRow1 = `<th class="workout-db-sticky-col" rowspan="3" style="font-weight:600; text-align:left;">Exercise</th>`;
+  headerRow1 += `<th colspan="7" style="background:var(--color-background-secondary); font-weight:600; border-bottom:0.5px solid var(--color-border-tertiary);">Week 1</th>`;
+  headerRow1 += `<th colspan="7" style="background:var(--color-background-secondary); font-weight:600; border-bottom:0.5px solid var(--color-border-tertiary);">Week 2</th>`;
+  headerRow1 += `<th colspan="7" style="background:var(--color-background-secondary); font-weight:600; border-bottom:0.5px solid var(--color-border-tertiary);">Week 3</th>`;
+  headerRow1 += `<th colspan="7" style="background:var(--color-background-secondary); font-weight:600; border-bottom:0.5px solid var(--color-border-tertiary);">Week 4</th>`;
+  headerRow1 += `<th colspan="7" style="background:var(--color-background-secondary); font-weight:600; border-bottom:0.5px solid var(--color-border-tertiary);">Week 5</th>`;
+
+  let headerRow2 = "";
+  for (let i = 0; i < 35; i++) {
+    headerRow2 += `<th style="background:var(--color-background-secondary); font-size:10px; font-weight:600; border-bottom:0.5px solid var(--color-border-tertiary);">${DB_DAYS[i % 7]}</th>`;
+  }
+
+  let headerRow3 = "";
+  for (let i = 0; i < 35; i++) {
+    headerRow3 += `<th style="background:var(--color-background-secondary); font-size:10px; font-weight:600; border-bottom:0.5px solid var(--color-border-secondary);">${DB_DATES[i]}</th>`;
+  }
+
+  let tableRowsHtml = "";
+  let prevCategory = null;
+
+  for (const ex of ALL_EXERCISES) {
+    if (ex.category !== prevCategory) {
+      prevCategory = ex.category;
+      const colStyle = getCategoryDbHeaderStyle(ex.category);
+      tableRowsHtml += `
+        <tr style="background:var(--color-background-secondary);">
+          <td colspan="36" style="padding:6px 12px; border-bottom:0.5px solid var(--color-border-secondary); text-align:left; position:sticky; left:0; z-index:9; ${colStyle}">
+            ${ex.category}
+          </td>
+        </tr>
+      `;
+    }
+    
+    let rowCells = `<td class="workout-db-sticky-col" style="text-align:left; font-weight:500; white-space:nowrap; font-size:11px;">${ex.name}</td>`;
+    
+    for (let i = 0; i < 35; i++) {
+      const dayName = DB_DAYS[i % 7];
+      const colKey = `col-${i + 1}`;
+      const isChecked = S.workout && S.workout[colKey] && S.workout[colKey][ex.name];
+      const isScheduled = ex.days.includes(dayName);
+      
+      let cellContent = "";
+      let cellStyle = "";
+      if (isChecked) {
+        cellContent = "✓";
+        cellStyle = "color:var(--color-accent-green); font-weight:bold; font-size:12px;";
+      } else if (isScheduled) {
+        cellContent = "–";
+        cellStyle = "color:var(--color-text-tertiary); font-weight:normal; opacity:0.7;";
+      }
+      
+      const idSafe = ex.name.replace(/\s+/g, '_');
+      rowCells += `
+        <td id="db-cell-${idSafe}-${colKey}" onclick="window.toggleDbCell('${ex.name.replace(/'/g, "\\'")}', '${colKey}', '${dayName}')" 
+            style="cursor:pointer; user-select:none; -webkit-user-select:none; ${cellStyle}">
+          ${cellContent}
+        </td>
+      `;
+    }
+    
+    tableRowsHtml += `<tr>${rowCells}</tr>`;
+  }
+
+  // Render Walking Row
+  let walkingCells = `<td class="workout-db-sticky-col" style="text-align:left; font-weight:600; font-size:11px; color:var(--color-text-secondary);">Walking (km)</td>`;
+  for (let i = 0; i < 35; i++) {
+    const colKey = `col-${i + 1}`;
+    const dist = S.workout && S.workout[colKey] && S.workout[colKey]["walking_dist"] || "";
+    walkingCells += `
+      <td id="db-walking-cell-${colKey}" onclick="window.toggleWalkingDbCell('${colKey}')" 
+          style="cursor:pointer; user-select:none; -webkit-user-select:none; font-weight:600; color:var(--color-accent-blue); font-size:11px;">
+        ${dist ? dist.replace(" km", "") : ""}
+      </td>
+    `;
+  }
+  tableRowsHtml += `<tr style="border-top:1.5px solid var(--color-border-tertiary);">${walkingCells}</tr>`;
+
+  // Done this week row
+  let bottomCells = `<td class="workout-db-sticky-col" style="background:var(--color-background-secondary) !important; text-align:left; font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:var(--color-text-secondary);">DONE THIS WEEK →</td>`;
+  for (let i = 0; i < 35; i++) {
+    const colKey = `col-${i + 1}`;
+    const count = getColumnCheckCount(colKey);
+    bottomCells += `
+      <td id="db-count-cell-${colKey}" style="background:var(--color-background-secondary); font-weight:700; color:var(--color-text-primary); font-size:11px;">
+        ${count > 0 ? count : ""}
+      </td>
+    `;
+  }
+  tableRowsHtml += `<tr style="border-top:1.5px solid var(--color-border-secondary);">${bottomCells}</tr>`;
+
+  return `<div class="pg" style="padding:20px 0 20px">
+    <button class="back-btn" onclick="goTo('workout')">
+      <i class="ti ti-arrow-left" style="font-size:15px" aria-hidden="true"></i>Back
+    </button>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin:18px 0 10px">
+      <div>
+        <div style="font-size:24px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif)">Workout Database</div>
+        <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px;">Scroll horizontally. Tap cells to manually record checks / walking distance.</div>
+      </div>
+      <button onclick="window.resetWorkoutCycle()" style="font-size:11px;border:0.5px solid var(--color-accent-red);border-radius:6px;padding:5px 10px;background:transparent;color:var(--color-accent-red);font-family:var(--font-sans);cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+        <i class="ti ti-trash-x" style="font-size:12px"></i> Reset Cycle
+      </button>
+    </div>
+
+    <div class="workout-db-table-container">
+      <table class="workout-db-table">
+        <thead>
+          <tr style="border-bottom:0.5px solid var(--color-border-secondary);">${headerRow1}</tr>
+          <tr style="border-bottom:0.5px solid var(--color-border-tertiary);">${headerRow2}</tr>
+          <tr style="border-bottom:0.5px solid var(--color-border-secondary);">${headerRow3}</tr>
+        </thead>
+        <tbody>
+          ${tableRowsHtml}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function renderCalendar() {
+  const today = new Date();
+  if (S.calendar_year === null) S.calendar_year = today.getFullYear();
+  if (S.calendar_month === null) S.calendar_month = today.getMonth();
+
+  const year = S.calendar_year;
+  const month = S.calendar_month;
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+  const startDayIdx = firstDay === 0 ? 6 : firstDay - 1;
+
+  // Header
+  const headerHtml = `
+    <div class="calendar-header">
+      <button class="calendar-nav-btn" onclick="window.changeCalendarMonth(-1)">
+        <i class="ti ti-chevron-left"></i>
+      </button>
+      <div class="calendar-title">${monthNames[month]} ${year}</div>
+      <button class="calendar-nav-btn" onclick="window.changeCalendarMonth(1)">
+        <i class="ti ti-chevron-right"></i>
+      </button>
+    </div>
+  `;
+
+  // Grid Headers
+  const weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const weekdaysHtml = weekdayNames.map(name => `
+    <div class="calendar-day-name">${name}</div>
+  `).join('');
+
+  let cellsHtml = "";
+  // Empty slots at start of month
+  for (let i = 0; i < startDayIdx; i++) {
+    cellsHtml += `<div class="calendar-day-cell empty"></div>`;
+  }
+
+  // Day cells
+  for (let d = 1; d <= daysInMonth; d++) {
+    const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === d;
+    cellsHtml += `
+      <div class="calendar-day-cell ${isToday ? 'today' : ''}">
+        ${d}
+      </div>
+    `;
+  }
+
+  // Fill remaining slots
+  const totalCells = startDayIdx + daysInMonth;
+  const remaining = (7 - (totalCells % 7)) % 7;
+  for (let i = 0; i < remaining; i++) {
+    cellsHtml += `<div class="calendar-day-cell empty"></div>`;
+  }
+
+  return `<div class="pg" style="padding:20px 0 20px">
+    <button class="back-btn" onclick="goTo('home')">
+      <i class="ti ti-arrow-left" style="font-size:15px" aria-hidden="true"></i>Back
+    </button>
+    <div style="font-size:24px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-serif);margin:18px 0 4px">Calendar</div>
+    <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:24px">View the current monthly schedule</div>
+
+    ${headerHtml}
+
+    <div class="calendar-grid">
+      ${weekdaysHtml}
+      ${cellsHtml}
+    </div>
+  </div>`;
+}
+
+window.toggleWorkoutExercise = (exName) => {
+  if (navigator.vibrate) navigator.vibrate(50);
+  const activeColIdx = getWorkoutColIdx();
+  const colKey = `col-${activeColIdx}`;
+
+  if (!S.workout[colKey]) {
+    S.workout[colKey] = {};
+  }
+
+  const isChecked = !S.workout[colKey][exName];
+  S.workout[colKey][exName] = isChecked;
+  sv('kwig_workout_data', S.workout);
+  
+  const idSafe = exName.replace(/\s+/g, '_');
+  const rowEl = document.getElementById(`workout-row-${idSafe}`);
+  if (rowEl) {
+    const textEl = rowEl.querySelector('.workout-ex-name');
+    const cbxCont = rowEl.querySelector('.workout-cbx-container');
+    if (textEl && cbxCont) {
+      textEl.style.color = isChecked ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)';
+      textEl.style.textDecoration = isChecked ? 'line-through' : 'none';
+      cbxCont.innerHTML = cbx(isChecked);
+    }
+  } else {
+    render();
+  }
+};
+
+window.toggleDbCell = (exName, colKey, dayName) => {
+  if (navigator.vibrate) navigator.vibrate(50);
+  if (!S.workout[colKey]) {
+    S.workout[colKey] = {};
+  }
+
+  const isChecked = !S.workout[colKey][exName];
+  S.workout[colKey][exName] = isChecked;
+  sv('kwig_workout_data', S.workout);
+  
+  const idSafe = exName.replace(/\s+/g, '_');
+  const cellEl = document.getElementById(`db-cell-${idSafe}-${colKey}`);
+  if (cellEl) {
+    const isScheduled = ALL_EXERCISES.find(ex => ex.name === exName).days.includes(dayName);
+    if (isChecked) {
+      cellEl.textContent = "✓";
+      cellEl.style.color = "var(--color-accent-green)";
+      cellEl.style.fontWeight = "bold";
+      cellEl.style.fontSize = "12px";
+      cellEl.style.opacity = "1";
+    } else if (isScheduled) {
+      cellEl.textContent = "–";
+      cellEl.style.color = "var(--color-text-tertiary)";
+      cellEl.style.fontWeight = "normal";
+      cellEl.style.fontSize = "11px";
+      cellEl.style.opacity = "0.7";
+    } else {
+      cellEl.textContent = "";
+      cellEl.style.color = "";
+      cellEl.style.fontWeight = "";
+      cellEl.style.fontSize = "";
+    }
+    
+    // Update count row inline
+    const count = getColumnCheckCount(colKey);
+    const countEl = document.getElementById(`db-count-cell-${colKey}`);
+    if (countEl) {
+      countEl.textContent = count > 0 ? count : "";
+    }
+  } else {
+    render();
+  }
+};
+
+window.toggleSkipGym = (checked) => {
+  if (navigator.vibrate) navigator.vibrate(50);
+  const activeColIdx = getWorkoutColIdx();
+  const colKey = `col-${activeColIdx}`;
+  
+  if (!S.workout[colKey]) {
+    S.workout[colKey] = {};
+  }
+  
+  S.workout[colKey]["skipped_gym"] = checked;
+  if (!checked) {
+    S.workout[colKey]["walking_dist"] = "";
+  }
+  sv('kwig_workout_data', S.workout);
+  render();
+};
+
+window.changeWalkingDist = (val) => {
+  if (navigator.vibrate) navigator.vibrate(40);
+  const activeColIdx = getWorkoutColIdx();
+  const colKey = `col-${activeColIdx}`;
+  
+  if (!S.workout[colKey]) {
+    S.workout[colKey] = {};
+  }
+  
+  S.workout[colKey]["walking_dist"] = val;
+  sv('kwig_workout_data', S.workout);
+  render();
+};
+
+window.toggleWalkingDbCell = (colKey) => {
+  if (navigator.vibrate) navigator.vibrate(50);
+  if (!S.workout[colKey]) {
+    S.workout[colKey] = {};
+  }
+  
+  const current = S.workout[colKey]["walking_dist"] || "";
+  const cycle = ["", "1 km", "2 km", "3 km", "4 km", "5 km"];
+  const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
+  const nextVal = cycle[nextIdx];
+  
+  S.workout[colKey]["walking_dist"] = nextVal;
+  S.workout[colKey]["skipped_gym"] = nextVal !== "";
+  
+  sv('kwig_workout_data', S.workout);
+  
+  const cellEl = document.getElementById(`db-walking-cell-${colKey}`);
+  if (cellEl) {
+    cellEl.textContent = nextVal ? nextVal.replace(" km", "") : "";
+  } else {
+    render();
+  }
+};
+
+window.changeCalendarMonth = (offset) => {
+  if (navigator.vibrate) navigator.vibrate(40);
+  let newMonth = S.calendar_month + offset;
+  let newYear = S.calendar_year;
+  
+  if (newMonth < 0) {
+    newMonth = 11;
+    newYear -= 1;
+  } else if (newMonth > 11) {
+    newMonth = 0;
+    newYear += 1;
+  }
+  
+  S.calendar_month = newMonth;
+  S.calendar_year = newYear;
+  render();
+};
+
+window.resetWorkoutCycle = () => {
+  const conf = confirm("Are you sure you want to reset the workout cycle? This will clear all recorded checks.");
+  if (!conf) return;
+  
+  if (navigator.vibrate) navigator.vibrate(100);
+  const monday = getMondayOfCurrentWeek(new Date());
+  S.workout_cycle_start = getLocalDateString(monday);
+  S.workout = {};
+  sv('kwig_workout_cycle_start', S.workout_cycle_start);
+  sv('kwig_workout_data', S.workout);
+  
+  render();
+};
 
 // Initial run
 render();

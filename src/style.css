@@ -10,26 +10,7 @@
   --border-radius-lg: 12px;
   --max-app-width: 410px;
 
-  /* Theme Defaults (Light mode) */
-  --color-background-primary: #ffffff;
-  --color-background-secondary: #f8f9fa;
-  --color-border-secondary: rgba(55, 53, 47, 0.14);
-  --color-border-tertiary: rgba(55, 53, 47, 0.07);
-  --color-text-primary: #37352f;
-  --color-text-secondary: rgba(55, 53, 47, 0.65);
-  --color-text-tertiary: rgba(55, 53, 47, 0.45);
-  --color-shadow: rgba(15, 15, 15, 0.05);
-  --color-title-faded: rgba(55, 53, 47, 0.48);
-
-  /* Primary Accent Colors */
-  --color-accent-green: #0F6E56;
-  --color-accent-orange: #BA7517;
-  --color-accent-red: #993C1D;
-  --color-accent-blue: #2eaadc;
-}
-
-/* Explicit Dark Mode class */
-html.dark {
+  /* Theme Defaults (Default Dark mode) */
   --color-background-primary: #191919;
   --color-background-secondary: #222222;
   --color-border-secondary: rgba(255, 255, 255, 0.12);
@@ -39,10 +20,113 @@ html.dark {
   --color-text-tertiary: rgba(255, 255, 255, 0.40);
   --color-shadow: rgba(0, 0, 0, 0.2);
   --color-title-faded: rgba(255, 255, 255, 0.28);
+  --color-outer-bg: #121212;
 
+  /* Primary Accent Colors */
   --color-accent-green: #25b894;
   --color-accent-orange: #e09934;
   --color-accent-red: #e06143;
+  --color-accent-blue: #2eaadc;
+}
+
+
+/* Explicit Coffee Theme */
+html.theme-coffee {
+  --color-background-primary: #fdfbfa;
+  --color-background-secondary: #f6efe4;
+  --color-border-secondary: rgba(78, 54, 41, 0.15);
+  --color-border-tertiary: rgba(78, 54, 41, 0.08);
+  --color-text-primary: #4e3629;
+  --color-text-secondary: #7c6053;
+  --color-text-tertiary: #a28c81;
+  --color-shadow: rgba(78, 54, 41, 0.05);
+  --color-title-faded: rgba(78, 54, 41, 0.45);
+
+  --color-accent-green: #6e856c;
+  --color-accent-orange: #ca9670;
+  --color-accent-red: #bd7269;
+  --color-accent-blue: #7d9ba6;
+  --color-outer-bg: #ebdcc9;
+
+  --border-radius-md: 10px !important;
+  --border-radius-lg: 16px !important;
+}
+
+/* ---------------- Coffee Styling Overrides ---------------- */
+html.theme-coffee #app-container {
+  border-radius: 28px !important;
+  border: 1px solid rgba(78, 54, 41, 0.12) !important;
+  box-shadow: 0 16px 40px rgba(78, 54, 41, 0.08) !important;
+}
+/* Soft cocoa rounded cards */
+html.theme-coffee .f3 > div[style*="background"],
+html.theme-coffee .f4 > div[style*="background"],
+html.theme-coffee #notes-items-container > div,
+html.theme-coffee #notes-empty-message,
+html.theme-coffee #notes-list-wrapper > div[style*="background"],
+html.theme-coffee div[id^="notes-folder-block-"],
+html.theme-coffee div[style*="grid-template-columns"] > div,
+html.theme-coffee .modal-content,
+html.theme-coffee div[id*="-modal"] > div {
+  border-radius: 16px !important;
+  box-shadow: 0 6px 18px rgba(78, 54, 41, 0.06) !important;
+  border: 1px solid rgba(78, 54, 41, 0.1) !important;
+}
+html.theme-coffee select,
+html.theme-coffee input,
+html.theme-coffee textarea,
+html.theme-coffee button,
+html.theme-coffee .sidebar-avatar,
+html.theme-coffee .sidebar-avatar img {
+  border-radius: 12px !important;
+}
+/* Pill shaped buttons and controls */
+html.theme-coffee button,
+html.theme-coffee select,
+html.theme-coffee .add-btn,
+html.theme-coffee .back-btn,
+html.theme-coffee .editor-btn {
+  border-radius: 30px !important;
+  border: 1px solid rgba(78, 54, 41, 0.2) !important;
+  background: var(--color-background-secondary) !important;
+  color: var(--color-text-primary) !important;
+  padding: 6px 16px !important;
+  font-weight: 500 !important;
+  transition: background-color 0.2s, transform 0.1s !important;
+}
+html.theme-coffee button:active,
+html.theme-coffee .add-btn:active,
+html.theme-coffee .back-btn:active,
+html.theme-coffee .editor-btn:active {
+  transform: scale(0.96) !important;
+}
+/* Round checkboxes */
+html.theme-coffee div[style*="width:18px"][style*="height:18px"] {
+  border-radius: 50% !important;
+  border: 1.5px solid var(--color-text-secondary) !important;
+  box-shadow: none !important;
+}
+html.theme-coffee div[style*="width:18px"][style*="height:18px"] i {
+  color: var(--color-background-primary) !important;
+}
+/* Monospace weights console in Coffee */
+html.theme-coffee div[style*="font-family:'Silkscreen'"] {
+  border-radius: 16px !important;
+  background-color: #211815 !important;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.3) !important;
+  border: 1px solid rgba(78, 54, 41, 0.2) !important;
+}
+html.theme-coffee div[style*="font-family:'Silkscreen'"] textarea {
+  border: none !important;
+  box-shadow: none !important;
+}
+/* Soft scrollbar for Coffee */
+html.theme-coffee ::-webkit-scrollbar-track {
+  background: #fdfbfa !important;
+}
+html.theme-coffee ::-webkit-scrollbar-thumb {
+  background: #7c6053 !important;
+  border-radius: 10px !important;
 }
 
 /* Reset and Base Styles */
@@ -50,10 +134,12 @@ html.dark {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
 body {
-  background-color: #f1f1ef; /* Outer workspace color on desktop */
+  background-color: var(--color-outer-bg); /* Outer workspace color on desktop */
   font-family: var(--font-sans);
   color: var(--color-text-primary);
   min-height: 100vh;
@@ -62,7 +148,15 @@ body {
   align-items: center;
   transition: background-color 0.3s ease;
   overflow-x: hidden;
+  user-select: none;
+  -webkit-user-select: none;
 }
+
+input, textarea, [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 
 /* Mobile viewport or standalone mobile app mode */
 @media (max-width: 480px) {
@@ -526,6 +620,13 @@ input:checked + .slider-toggle:before {
   border: none;
   color: #ffffff;
 }
+
+.modal-btn-confirm {
+  background: var(--color-text-primary);
+  border: none;
+  color: var(--color-background-primary);
+}
+
 
 /* Long press row highlight pulse effect */
 .held-highlight {
@@ -1079,4 +1180,230 @@ input:checked + .slider-toggle:before {
   color: var(--color-accent-green);
   background-color: rgba(37, 184, 148, 0.1);
 }
+
+/* Workout Page & Workout Database Styling */
+.workout-selector-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.workout-row-selector {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+.workout-row-selector::-webkit-scrollbar {
+  height: 4px;
+}
+.workout-row-selector::-webkit-scrollbar-thumb {
+  background: var(--color-border-tertiary);
+  border-radius: 2px;
+}
+.workout-selector-btn {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-secondary);
+  color: var(--color-text-secondary);
+  padding: 6px 12px;
+  border-radius: var(--border-radius-md);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  outline: none;
+}
+.workout-selector-btn.active {
+  background: var(--color-text-primary);
+  color: var(--color-background-primary);
+  border-color: var(--color-text-primary);
+}
+
+.workout-exercise-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.workout-exercise-row:hover {
+  background-color: var(--color-background-secondary);
+}
+
+.workout-cat-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  min-width: 65px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.workout-db-btn {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-secondary);
+  color: var(--color-text-primary);
+  padding: 10px 16px;
+  border-radius: var(--border-radius-lg);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 16px;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 6px var(--color-shadow);
+}
+.workout-db-btn:hover {
+  background: var(--color-background-secondary);
+}
+
+/* Workout Database Table Scrollable Styles */
+.workout-db-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-background-primary);
+  box-shadow: 0 4px 12px var(--color-shadow);
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 20px;
+}
+.workout-db-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-family: var(--font-sans);
+}
+.workout-db-table th,
+.workout-db-table td {
+  padding: 8px 10px;
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+  border-right: 0.5px solid var(--color-border-tertiary);
+  text-align: center;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.workout-db-table th {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+/* Sticky Column: Category/Exercise Name */
+.workout-db-table .workout-db-sticky-col {
+  position: sticky !important;
+  left: 0 !important;
+  background: var(--color-background-primary) !important;
+  z-index: 10 !important;
+  text-align: left;
+  border-right: 1.5px solid var(--color-border-secondary) !important;
+  font-weight: 500;
+}
+/* Sticky Column Header */
+.workout-db-table th.workout-db-sticky-col {
+  background: var(--color-background-secondary) !important;
+  z-index: 12 !important;
+}
+/* Top sticky rows for Week, Day, Date */
+.workout-db-table tr:nth-child(1) th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+/* Calendar Page Styling */
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.calendar-title {
+  font-size: 20px;
+  font-weight: 600;
+  font-family: var(--font-serif);
+  color: var(--color-text-primary);
+}
+.calendar-nav-btn {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-secondary);
+  color: var(--color-text-primary);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 4px var(--color-shadow);
+}
+.calendar-nav-btn:hover {
+  background: var(--color-background-secondary);
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 12px;
+  box-shadow: 0 4px 12px var(--color-shadow);
+}
+.calendar-day-name {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-bottom: 6px;
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+.calendar-day-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  border-radius: var(--border-radius-md);
+  position: relative;
+  transition: all 0.15s ease;
+  cursor: default;
+}
+.calendar-day-cell.empty {
+  color: transparent;
+  visibility: hidden;
+}
+.calendar-day-cell.today {
+  border: 1.5px solid var(--color-text-primary);
+  font-weight: 600;
+}
+.calendar-day-cell.today::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  background: var(--color-text-primary);
+  border-radius: 50%;
+}
+.calendar-day-cell:not(.empty):hover {
+  background-color: var(--color-background-secondary);
+}
+
+
 
