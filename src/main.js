@@ -618,7 +618,8 @@ function renderHome() {
           const wLvl = hState.water_level;
           const display = hasWater ? (wLvl % 1 === 0 ? wLvl.toFixed(0) + 'L' : wLvl.toFixed(1) + 'L') : 'v';
           return `<td style="padding:4px 2px;text-align:center;vertical-align:middle">
-            <div onclick="window.openWeeklyLevelDropdown(event, '${d.dateKey}', 'water')" 
+            <div id="wm-drop-${d.dateKey}-water" 
+                 onclick="window.openWeeklyLevelDropdown(event, '${d.dateKey}', 'water')" 
                  style="font-size:10px; font-weight:600; color:var(--color-title-faded); cursor:pointer; user-select:none; display:inline-flex; align-items:center; justify-content:center; gap:2px; width:100%; height:20px; border-radius:4px; transition: background-color 0.15s;"
                  onmouseover="this.style.background='var(--color-background-secondary)'"
                  onmouseout="this.style.background='transparent'">
@@ -630,7 +631,8 @@ function renderHome() {
           const cLvl = hState.conscious_level;
           const display = hasConscious ? cLvl : 'v';
           return `<td style="padding:4px 2px;text-align:center;vertical-align:middle">
-            <div onclick="window.openWeeklyLevelDropdown(event, '${d.dateKey}', 'conscious')" 
+            <div id="wm-drop-${d.dateKey}-conscious" 
+                 onclick="window.openWeeklyLevelDropdown(event, '${d.dateKey}', 'conscious')" 
                  style="font-size:10px; font-weight:600; color:var(--color-title-faded); cursor:pointer; user-select:none; display:inline-flex; align-items:center; justify-content:center; gap:2px; width:100%; height:20px; border-radius:4px; transition: background-color 0.15s;"
                  onmouseover="this.style.background='var(--color-background-secondary)'"
                  onmouseout="this.style.background='transparent'">
@@ -642,7 +644,8 @@ function renderHome() {
       
       const isCh = S.weeklyHabitStates[d.dateKey] && S.weeklyHabitStates[d.dateKey][h.type] && S.weeklyHabitStates[d.dateKey][h.type][h.id];
       return `<td style="padding:6px 4px;text-align:center;vertical-align:middle">
-        <div onclick="window.togWeeklyHabit('${h.id}','${d.dateKey}','${h.type}')" 
+        <div id="wm-check-${h.id}-${d.dateKey}" 
+             onclick="window.togWeeklyHabit('${h.id}','${d.dateKey}','${h.type}')" 
              style="width:16px;height:16px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;cursor:pointer;
                     border:1.5px solid ${isCh ? color : 'var(--color-border-secondary)'};
                     background-color: ${isCh ? color : 'transparent'};
@@ -693,6 +696,7 @@ function renderHome() {
     const od = t.deadline && t.deadline < tiso() && !t.done;
     const dlColor = od ? 'var(--color-accent-red)' : 'var(--color-text-secondary)';
     return `<div class="cr" 
+      id="task-row-${t.id}"
       data-del-type="task" 
       data-del-id="${t.id}" 
       data-del-name="${t.text || 'Untitled'}"
@@ -834,12 +838,16 @@ function renderHome() {
       </div>
       <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);display:flex;margin-bottom:24px;box-shadow: 0 2px 8px var(--color-shadow)">
         <div class="tap" onclick="goTo('productivity')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 8px;border-radius:var(--border-radius-lg) 0 0 var(--border-radius-lg)">
-          ${ring(totals.prod, 100, 86, 6, 'var(--color-text-primary)')}
+          <div id="ring-prod-container" style="display:flex;justify-content:center;align-items:center;width:100px;height:100px;">
+            ${ring(totals.prod, 100, 86, 6, 'var(--color-text-primary)')}
+          </div>
           <div style="font-size:10px;font-weight:600;color:var(--color-text-secondary);letter-spacing:0.07em;text-transform:uppercase">Productivity</div>
         </div>
         <div style="width:0.5px;background:var(--color-border-tertiary);margin:12px 0"></div>
         <div class="tap" onclick="goTo('health')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 8px;border-radius:0 var(--border-radius-lg) var(--border-radius-lg) 0">
-          ${ring(totals.health, 100, 86, 6, 'var(--color-text-secondary)')}
+          <div id="ring-health-container" style="display:flex;justify-content:center;align-items:center;width:100px;height:100px;">
+            ${ring(totals.health, 100, 86, 6, 'var(--color-text-secondary)')}
+          </div>
           <div style="font-size:10px;font-weight:600;color:var(--color-text-secondary);letter-spacing:0.07em;text-transform:uppercase">Health</div>
         </div>
       </div>
@@ -1251,7 +1259,18 @@ window.cyclePrinciple = (e) => {
       S.activePrincipleIndex = dayOfYear % principlesCount;
     }
     S.activePrincipleIndex = (S.activePrincipleIndex + 1) % principlesCount;
-    render();
+    
+    const displayPrinciple = S.principles[S.activePrincipleIndex].trim() || "Empty principle. Click to cycle, hold to edit...";
+    const fraction = `${S.activePrincipleIndex + 1}/${principlesCount}`;
+    
+    const ttEl = document.getElementById('tt');
+    const thEl = document.getElementById('th');
+    if (ttEl && thEl) {
+      ttEl.innerHTML = `&ldquo;${displayPrinciple}&rdquo;`;
+      thEl.textContent = fraction;
+    } else {
+      render();
+    }
   }
 };
 
@@ -1305,19 +1324,44 @@ window.togWeeklyHabit = async (habitId, dateKey, type) => {
   if (!S.weeklyHabitStates[dateKey]) {
     S.weeklyHabitStates[dateKey] = { prod: {}, health: {} };
   }
-  S.weeklyHabitStates[dateKey][type][habitId] = !S.weeklyHabitStates[dateKey][type][habitId];
+  const isCh = !S.weeklyHabitStates[dateKey][type][habitId];
+  S.weeklyHabitStates[dateKey][type][habitId] = isCh;
   await sv(`${type}-${dateKey}`, S.weeklyHabitStates[dateKey][type]);
   
   if (dateKey === TK) {
     if (type === 'prod') {
-      S.pc[habitId] = S.weeklyHabitStates[dateKey][type][habitId];
+      S.pc[habitId] = isCh;
     } else {
-      S.hc[habitId] = S.weeklyHabitStates[dateKey][type][habitId];
+      S.hc[habitId] = isCh;
     }
   }
+  
+  const checkEl = document.getElementById(`wm-check-${habitId}-${dateKey}`);
+  if (checkEl) {
+    let color = 'var(--color-accent-blue)';
+    const category = type === 'prod' ? (si().some(x => x.id === habitId) ? 'Study' : 'Fun') : 'Health';
+    if (category === 'Fun') color = 'var(--color-accent-orange)';
+    if (category === 'Health') color = 'var(--color-accent-green)';
+    
+    checkEl.style.borderColor = isCh ? color : 'var(--color-border-secondary)';
+    checkEl.style.backgroundColor = isCh ? color : 'transparent';
+    checkEl.innerHTML = isCh ? `<i class="ti ti-check" style="font-size:9px;color:var(--color-background-primary);font-weight:bold"></i>` : '';
+  }
+
   await loadWd();
   await loadDb();
-  render();
+  
+  const totals = getHabitTotals(S.pc, S.hc);
+  
+  const ringProdCont = document.getElementById('ring-prod-container');
+  if (ringProdCont) {
+    ringProdCont.innerHTML = ring(totals.prod, 100, 86, 6, 'var(--color-text-primary)');
+  }
+  
+  const ringHealthCont = document.getElementById('ring-health-container');
+  if (ringHealthCont) {
+    ringHealthCont.innerHTML = ring(totals.health, 100, 86, 6, 'var(--color-text-secondary)');
+  }
 };
 
 function getHabitIcon(id, category) {
@@ -1352,7 +1396,25 @@ window.togT = id => {
   if (t) {
     t.done = !t.done;
     sv(`tasks-${TK}`, S.tasks);
-    render();
+    
+    const rowEl = document.getElementById(`task-row-${id}`);
+    if (rowEl) {
+      const textEl = rowEl.children[0];
+      const checkboxEl = rowEl.children[3];
+      if (textEl && checkboxEl) {
+        textEl.style.color = t.done ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)';
+        textEl.style.textDecoration = t.done ? 'line-through' : 'none';
+        checkboxEl.innerHTML = cbx(t.done);
+      }
+      
+      const dlEl = rowEl.children[2];
+      if (dlEl) {
+        const od = t.deadline && t.deadline < tiso() && !t.done;
+        dlEl.style.color = od ? 'var(--color-accent-red)' : 'var(--color-text-secondary)';
+      }
+    } else {
+      render();
+    }
   }
 };
 
@@ -1362,7 +1424,16 @@ window.cycP = id => {
   const o = ['High', 'Medium', 'Low'];
   t.priority = o[(o.indexOf(t.priority || 'Medium') + 1) % 3];
   sv(`tasks-${TK}`, S.tasks);
-  render();
+  
+  const rowEl = document.getElementById(`task-row-${id}`);
+  if (rowEl) {
+    const priEl = rowEl.children[1];
+    if (priEl) {
+      priEl.innerHTML = pri(t.priority);
+    }
+  } else {
+    render();
+  }
 };
 
 window.addR = sec => {
@@ -1471,8 +1542,11 @@ window.changeWeeklyLevel = async (dateKey, type, value) => {
     S.weeklyHabitStates[dateKey] = { prod: {}, health: {} };
   }
   
+  let floatVal = null;
+  let intVal = null;
+  
   if (type === 'water') {
-    const floatVal = (value === null || value === 'null') ? null : parseFloat(value);
+    floatVal = (value === null || value === 'null') ? null : parseFloat(value);
     if (floatVal === null) {
       delete S.weeklyHabitStates[dateKey].health.water_level;
     } else {
@@ -1492,7 +1566,7 @@ window.changeWeeklyLevel = async (dateKey, type, value) => {
       if (slider) slider.value = floatVal !== null ? floatVal : 1.0;
     }
   } else if (type === 'conscious') {
-    const intVal = (value === null || value === 'null') ? null : parseInt(value);
+    intVal = (value === null || value === 'null') ? null : parseInt(value);
     if (intVal === null) {
       delete S.weeklyHabitStates[dateKey].health.conscious_level;
     } else {
@@ -1522,8 +1596,32 @@ window.changeWeeklyLevel = async (dateKey, type, value) => {
     }
   }
   
-  updWd();
-  render();
+  // Synchronous DOM update of dropdown button
+  const dropEl = document.getElementById(`wm-drop-${dateKey}-${type}`);
+  if (dropEl) {
+    if (type === 'water') {
+      const display = floatVal !== null ? (floatVal % 1 === 0 ? floatVal.toFixed(0) + 'L' : floatVal.toFixed(1) + 'L') : 'v';
+      dropEl.textContent = display;
+    } else {
+      const display = intVal !== null ? intVal : 'v';
+      dropEl.textContent = display;
+    }
+  }
+  
+  await loadWd();
+  await loadDb();
+  
+  const totals = getHabitTotals(S.pc, S.hc);
+  
+  const ringProdCont = document.getElementById('ring-prod-container');
+  if (ringProdCont) {
+    ringProdCont.innerHTML = ring(totals.prod, 100, 86, 6, 'var(--color-text-primary)');
+  }
+  
+  const ringHealthCont = document.getElementById('ring-health-container');
+  if (ringHealthCont) {
+    ringHealthCont.innerHTML = ring(totals.health, 100, 86, 6, 'var(--color-text-secondary)');
+  }
 };
 
 window.openWeeklyLevelDropdown = (event, dateKey, type) => {
